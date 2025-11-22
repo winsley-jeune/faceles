@@ -43,97 +43,97 @@ const ANIMATION_PRESETS = {
 };
 
 // Subtitle style presets - MrBeast/viral style
-// Expanded with more engaging styles
+// OPTIMIZED: Smaller fonts, positioned lower to show AI art, fast karaoke pacing
 const SUBTITLE_STYLES = {
     mrbeast: {
         fontName: "Arial",
-        fontSize: 36,
+        fontSize: 24,
         primaryColor: "&H00FFFFFF",
         outlineColor: "&H00000000",
         backColor: "&H80000000",
         bold: -1,
-        outline: 4,
+        outline: 3,
         shadow: 2,
         alignment: 2,
-        marginV: 80,
+        marginV: 40,
         description: "Classic MrBeast style - white with black outline"
     },
     viral: {
         fontName: "Impact",
-        fontSize: 42,
+        fontSize: 26,
         primaryColor: "&H0000FFFF", // Yellow
         outlineColor: "&H00000000",
         backColor: "&H00000000",
         bold: -1,
-        outline: 5,
+        outline: 3,
         shadow: 0,
         alignment: 2,
-        marginV: 70,
+        marginV: 35,
         description: "Bold yellow - maximum attention grab"
     },
     dramatic: {
         fontName: "Arial",
-        fontSize: 34,
+        fontSize: 24,
         primaryColor: "&H00FFFFFF",
         outlineColor: "&H000000FF", // Red outline
         backColor: "&H40000000",
         bold: -1,
-        outline: 3,
-        shadow: 3,
+        outline: 2,
+        shadow: 2,
         alignment: 2,
-        marginV: 80,
+        marginV: 40,
         description: "White with red outline - dramatic/conspiracy"
     },
     clean: {
         fontName: "Arial",
-        fontSize: 38,
+        fontSize: 22,
         primaryColor: "&H00FFFFFF",
         outlineColor: "&H00000000",
         backColor: "&H00000000",
         bold: -1,
-        outline: 3,
+        outline: 2,
         shadow: 1,
         alignment: 2,
-        marginV: 85,
+        marginV: 35,
         description: "Clean minimal style - educational content"
     },
     neon: {
         fontName: "Impact",
-        fontSize: 40,
+        fontSize: 24,
         primaryColor: "&H00FF00FF", // Magenta/Pink
         outlineColor: "&H0000FFFF", // Cyan outline
         backColor: "&H00000000",
         bold: -1,
-        outline: 4,
+        outline: 3,
         shadow: 0,
         alignment: 2,
-        marginV: 75,
+        marginV: 35,
         description: "Neon colors - tech/cyber content"
     },
     energetic: {
         fontName: "Impact",
-        fontSize: 44,
+        fontSize: 26,
         primaryColor: "&H0000D4FF", // Orange
         outlineColor: "&H00000000",
         backColor: "&H00000000",
         bold: -1,
-        outline: 5,
+        outline: 3,
         shadow: 2,
         alignment: 2,
-        marginV: 70,
+        marginV: 35,
         description: "Bold orange - high energy content"
     },
     yellow_viral: {
         fontName: "Impact",
-        fontSize: 42,
+        fontSize: 26,
         primaryColor: "&H00FFFF00", // Yellow (RGBA: BBGGRR)
         outlineColor: "&H00000000",
         backColor: "&H00000000",
         bold: -1,
-        outline: 5,
+        outline: 3,
         shadow: 0,
         alignment: 2,
-        marginV: 70,
+        marginV: 35,
         description: "Bold yellow - maximum attention grab"
     }
 };
@@ -241,8 +241,8 @@ const createAnimatedSubtitles = (storyboard, outputPath) => {
         const sceneDuration = (scene.duration || 5) * 1000; // Convert to ms
         const wordDuration = sceneDuration / words.length;
 
-        // Smaller chunks (2-3 words) for faster, more engaging subtitles
-        const chunkSize = 3;
+        // Smaller chunks (2 words) for faster karaoke-style pacing like TikTok/Reels
+        const chunkSize = 2;
         for (let i = 0; i < words.length; i += chunkSize) {
             const chunk = words.slice(i, Math.min(i + chunkSize, words.length)).join(' ');
             const chunkWordCount = Math.min(chunkSize, words.length - i);
@@ -287,20 +287,24 @@ const mixAudioWithMusic = async (voicePath, musicPath, outputPath, musicVolume =
         const duration = await execPromise(durationCmd);
         const voiceDuration = parseFloat(duration.trim());
 
-        // Enhanced mix with:
-        // 1. Sidechain-like effect: music ducks when voice is present
-        // 2. Light compression on voice for consistency
-        // 3. Loudness normalization for platform compliance (-16 LUFS)
-        // 4. Fade out on music at the end
+        // Enhanced mix with RADIO-STYLE voice processing:
+        // 1. Aggressive compression on voice to make it POP
+        // 2. High-shelf EQ boost for clarity/presence
+        // 3. Lower music volume and duck harder
+        // 4. Loudness normalization for platform compliance (-14 LUFS - louder)
         const cmd = `ffmpeg -y -i "${voicePath}" -i "${musicPath}" \
             -filter_complex "\
-                [0:a]aformat=channel_layouts=stereo,acompressor=threshold=-20dB:ratio=3:attack=5:release=50:makeup=2[voice];\
-                [1:a]volume=${musicVolume},\
-                    lowpass=f=8000,\
-                    afade=t=in:st=0:d=1,\
-                    afade=t=out:st=${voiceDuration - 2}:d=2[music];\
+                [0:a]aformat=channel_layouts=stereo,\
+                    highpass=f=80,\
+                    acompressor=threshold=-18dB:ratio=6:attack=3:release=100:makeup=4,\
+                    equalizer=f=3000:t=h:w=2000:g=3,\
+                    equalizer=f=8000:t=h:w=3000:g=2[voice];\
+                [1:a]volume=${musicVolume * 0.7},\
+                    lowpass=f=6000,\
+                    afade=t=in:st=0:d=0.5,\
+                    afade=t=out:st=${voiceDuration - 1.5}:d=1.5[music];\
                 [voice][music]amix=inputs=2:duration=first:dropout_transition=2,\
-                loudnorm=I=-16:TP=-1.5:LRA=11[out]" \
+                loudnorm=I=-14:TP=-1:LRA=7[out]" \
             -map "[out]" -c:a aac -b:a 192k "${outputPath}"`;
 
         await execPromise(cmd);
@@ -410,7 +414,7 @@ export const renderVideo = async ({ audioBase64, subtitles, visuals, storyboard,
         // B. Mix with background music if provided
         let finalAudioPath = voicePath;
         if (musicPath && fs.existsSync(musicPath)) {
-            finalAudioPath = `${tmpDir}/mixed_audio.mp3`;
+            finalAudioPath = `${tmpDir}/mixed_audio.m4a`;
             await mixAudioWithMusic(voicePath, musicPath, finalAudioPath, musicVolume);
         }
 

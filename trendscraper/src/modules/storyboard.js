@@ -9,8 +9,11 @@ const parseRobustScript = (text) => {
         if (line.includes('|')) {
             const parts = line.split('|').map(s => s.trim());
             if (parts.length >= 3) {
-                // Extract Duration (remove non-digits)
-                const duration = parseInt(parts[0].replace(/[^0-9]/g, '')) || 5;
+                // Extract Duration - find FIRST number only, cap at 20 seconds
+                const durationMatch = parts[0].match(/\d+/);
+                let duration = durationMatch ? parseInt(durationMatch[0]) : 6;
+                // Sanity check: cap between 4-20 seconds per scene
+                duration = Math.max(4, Math.min(duration, 20));
                 const narration = parts[1];
                 const visual = parts[2];
 
@@ -51,14 +54,20 @@ export const generateNicheStoryboard = async (niche, topic) => {
     TOPIC: "${topic}"
     NICHE: "${niche}"
 
-    Write a 60-second script (8-10 scenes).
-    
-    STRICT OUTPUT FORMAT:
+    Write a 2-MINUTE script (15-20 scenes). Each scene should be 5-10 seconds.
+
+    STRICT OUTPUT FORMAT (one scene per line):
     Duration | Narration Text | Visual Description
 
     Example:
-    5 | Did you know your bank is losing you money? | Minimalist 3D piggy bank cracking open, red background.
-    7 | Inflation eats 3% of your savings every year. | Animated graph line going down, clean vector style.
+    6 | Did you know your bank is losing you money? | Minimalist 3D piggy bank cracking open, red background.
+    8 | Inflation eats 3% of your savings every year. | Animated graph line going down, clean vector style.
+    7 | Most people save in the wrong accounts. | Bank vault with cobwebs, dusty money stacks.
+
+    IMPORTANT:
+    - Duration is just a NUMBER (like 5, 6, 7, 8)
+    - Total duration should be around 120 seconds
+    - Make it educational and engaging throughout
   `;
 
     // --- THE RETRY LOOP ---
