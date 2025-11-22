@@ -10,9 +10,12 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "@google/generative-ai": "^0.24.1",
     "csvtojson": "^2.0.10",
     "express": "^5.1.0",
+    "node-fetch": "^3.3.2",
     "puppeteer": "^24.8.2",
+    "replicate": "^1.4.0",
     "uuid": "^11.1.0"
   },
   "type": "module"
