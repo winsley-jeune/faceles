@@ -1,4 +1,5 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
+import contentConfig from "./analytics/content_config.js";
 
 // --- ROBUST PARSER (Text-Based, No JSON headaches) ---
 const parseRobustScript = (text) => {
@@ -49,25 +50,43 @@ export const generateNicheStoryboard = async (niche, topic) => {
         "gemini-2.5-flash"
     ];
 
+    // GET AI-LEARNED OPTIMIZATION RULES
+    let optimizationRules = "";
+    try {
+        optimizationRules = contentConfig.getStoryboardEnhancement();
+        console.log("   📊 Applying learned content optimizations...");
+    } catch (e) {
+        console.log("   ℹ️ No content config yet, using defaults");
+    }
+
     const prompt = `
-    You are a viral educational content creator.
+    You are a viral educational content creator specializing in YouTube Shorts.
     TOPIC: "${topic}"
     NICHE: "${niche}"
 
+    ${optimizationRules}
+
     Write a 2-MINUTE script (15-20 scenes). Each scene should be 5-10 seconds.
+
+    CRITICAL - FIRST SCENE (HOOK):
+    The first 3 seconds determine if viewers stay or swipe away.
+    Start with something that creates IMMEDIATE curiosity or shock.
+    DO NOT start with "In this video" or "Today we'll learn" - that's a guaranteed swipe.
 
     STRICT OUTPUT FORMAT (one scene per line):
     Duration | Narration Text | Visual Description
 
     Example:
-    6 | Did you know your bank is losing you money? | Minimalist 3D piggy bank cracking open, red background.
-    8 | Inflation eats 3% of your savings every year. | Animated graph line going down, clean vector style.
-    7 | Most people save in the wrong accounts. | Bank vault with cobwebs, dusty money stacks.
+    6 | I deleted the entire server... and got promoted. | Shocked face emoji, computer screen with red error, 3D office scene.
+    8 | Most people think that's insane. But here's why it worked. | Brain lightbulb moment, question marks floating.
+    7 | The database was corrupted anyway. I just accelerated the inevitable. | Crumbling database icon, phoenix rising from ashes.
 
     IMPORTANT:
     - Duration is just a NUMBER (like 5, 6, 7, 8)
     - Total duration should be around 120 seconds
     - Make it educational and engaging throughout
+    - The FIRST SCENE is the most important - it must HOOK immediately
+    - Use storytelling and unexpected outcomes when possible
   `;
 
     // --- THE RETRY LOOP ---

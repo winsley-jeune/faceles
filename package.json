@@ -1,0 +1,17 @@
+{
+  "name": "viral-shorts-login-helper",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "login": "node login-helper.js",
+    "login:youtube": "node login-helper.js youtube",
+    "login:tiktok": "node login-helper.js tiktok",
+    "login:instagram": "node login-helper.js instagram",
+    "login:facebook": "node login-helper.js facebook",
+    "login:all": "node login-helper.js all",
+    "check": "node login-helper.js check"
+  },
+  "dependencies": {
+    "playwright": "^1.40.0"
+  }
+}

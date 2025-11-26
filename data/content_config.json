@@ -1,0 +1,141 @@
+{
+  "version": 1,
+  "lastUpdated": "2025-11-26T17:01:10.763Z",
+  "hooks": {
+    "style": "The first 3 seconds are critical. Start with a shocking statement, a question that creates curiosity, or a visual hook that grabs attention. Test different hook styles and analyze their impact on view duration.",
+    "patterns": [
+      "I did [unexpected action] and [surprising result]",
+      "[Shocking statement]... here's what happened",
+      "Everyone said [common belief], but [opposite happened]"
+    ],
+    "avoidPatterns": [
+      "In this video...",
+      "Today we'll talk about...",
+      "Did you know that..."
+    ],
+    "firstThreeSeconds": "Must create immediate curiosity or shock"
+  },
+  "topics": {
+    "focus": [
+      "Workplace stories with unexpected twists or outcomes",
+      "Content about workplace dynamics",
+      "Financial advice with a 'secret' or 'insider' twist",
+      "Stories of people bending rules to achieve success",
+      "Practical tips on improving financial situations"
+    ],
+    "avoid": [
+      "Generic financial advice (e.g., 'STOP Being Broke')",
+      "Abstract or psychological topics (e.g., 'GASLIGHTING')",
+      "Vague promises of revealing wealth secrets",
+      "Broad topics with clickbaity titles that don't deliver value",
+      "Content related to GASLIGHTING (at least for now)"
+    ],
+    "suggested": [
+      {
+        "topic": "Financial SECRETS Banks Don't Want You To Know",
+        "niche": "money",
+        "reason": "Capitalizes on the 'insider knowledge' angle that performed well.",
+        "addedAt": "2025-11-26T17:01:10.763Z"
+      },
+      {
+        "topic": "I Broke These Rules To Get My Dream Job",
+        "niche": "general",
+        "reason": "Appeals to a broader audience with relatable career aspirations, while still leveraging the 'rule-breaking' concept.",
+        "addedAt": "2025-11-26T17:01:10.763Z"
+      },
+      {
+        "topic": "Cashier Pranks Annoying Customer (Satisfying)",
+        "niche": "general",
+        "reason": "Taps into the same vein as the top performer, but focuses on instant karma rather than promotion, which might have broader appeal. Satisfying/Revenge theme always trends well.",
+        "addedAt": "2025-11-26T17:01:10.763Z"
+      }
+    ],
+    "niches": {
+      "preferred": [],
+      "testing": [],
+      "avoid": []
+    }
+  },
+  "titles": {
+    "patterns": [],
+    "keywords": [],
+    "avoidKeywords": [],
+    "maxLength": 70,
+    "useNumbers": true,
+    "useEmojis": false,
+    "guidance": "Continue using emojis and relevant hashtags. A/B test different title structures and keywords to see what generates the highest CTR. Ensure the title accurately reflects the video's content."
+  },
+  "contentStyle": {
+    "tone": "storytelling",
+    "pacing": "fast",
+    "emotionalHook": true,
+    "useCliffhangers": true,
+    "callToAction": "subtle"
+  },
+  "posting": {
+    "optimalTimes": [],
+    "frequency": "2-3 per day",
+    "bestDays": [],
+    "guidance": "Experiment with different posting times to see when your audience is most active. Analyze the performance of videos posted at different times and adjust the schedule accordingly. Consistency is key, so aim for a regular posting schedule (e.g., daily or every other day)."
+  },
+  "benchmarks": {
+    "targetViews": 50,
+    "targetLikes": 50,
+    "targetWatchTime": 70,
+    "currentAvgViews": 0
+  },
+  "visuals": {
+    "hook": {
+      "colorScheme": "high-contrast, vibrant, saturated colors",
+      "composition": "single clear focal point, uncluttered background",
+      "style": "dramatic lighting, cinematic, eye-catching",
+      "elements": [
+        "expressive face or reaction",
+        "bold visual contrast",
+        "sense of action or tension"
+      ],
+      "avoid": [
+        "cluttered scenes",
+        "low contrast",
+        "multiple competing focal points",
+        "small text",
+        "dark muddy colors"
+      ],
+      "enhancementPrompt": "THUMBNAIL-OPTIMIZED: ultra eye-catching, high contrast, vibrant colors, single clear focal point, dramatic lighting, scroll-stopping visual"
+    },
+    "body": {
+      "style": "clean, professional, consistent with hook",
+      "maintain": "visual continuity with hook frame"
+    },
+    "cta": {
+      "style": "engaging, inviting, clear message"
+    }
+  },
+  "learningHistory": [
+    {
+      "date": "2025-11-26T16:46:27.202Z",
+      "insights": [
+        "The top-performing video significantly outperforms all others, suggesting a strong preference for specific types of content.",
+        "Titles promising secrets or revealing hidden truths about wealth are not inherently successful.",
+        "The initial hook is likely not strong enough for most videos."
+      ],
+      "changes": [
+        "Topics to focus: Workplace stories with unexpected twists or outcomes, Content about workplace dynamics",
+        "Priority: Improve video hooks by focusing on a fast-paced and engaging opening. Capture attention in the first 1-3 seconds."
+      ]
+    },
+    {
+      "date": "2025-11-26T17:01:10.763Z",
+      "insights": [
+        "The top-performing video 'Cashier Broke Rules...' vastly outperforms all other content.",
+        "Very recent videos are drastically underperforming.",
+        "The title format with emojis and hashtags may be influencing click-through rates, but the content itself needs to deliver on the promise."
+      ],
+      "changes": [
+        "Topics to focus: Workplace stories with unexpected twists or outcomes, Content about workplace dynamics, Financial advice with a 'secret' or 'insider' twist",
+        "Priority: Analyze and replicate the elements that made 'Cashier Broke Rules...' successful. Focus on a compelling hook, valuable content, and clear takeaway."
+      ]
+    }
+  ],
+  "currentPriority": "Analyze and replicate the elements that made 'Cashier Broke Rules...' successful. Focus on a compelling hook, valuable content, and clear takeaway."
+}

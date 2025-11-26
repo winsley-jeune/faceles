@@ -13,7 +13,10 @@
     "@google/generative-ai": "^0.24.1",
     "csvtojson": "^2.0.10",
     "express": "^5.1.0",
+    "googleapis": "^144.0.0",
     "node-fetch": "^3.3.2",
+    "node-schedule": "^2.1.1",
+    "playwright": "^1.40.0",
     "puppeteer": "^24.8.2",
     "replicate": "^1.4.0",
     "uuid": "^11.1.0"

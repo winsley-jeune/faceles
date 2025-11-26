@@ -3,6 +3,7 @@ import Replicate from "replicate";
 import fs from "fs";
 import path from "path";
 import fetch from "node-fetch";
+import contentConfig from "./analytics/content_config.js";
 
 // Initialize Replicate with the key passed from Docker
 const replicate = new Replicate({
@@ -104,6 +105,7 @@ const getThemeConfig = (themeKey) => {
 /**
  * Enhance a prompt with quality modifiers based on scene type and theme
  * Applies consistent visual theme across all scenes
+ * NOW: Uses content_config for AI-learned visual optimization rules
  */
 const enhancePrompt = (prompt, sceneType = 'body', themeKey = 'dark_cinematic') => {
     const theme = getThemeConfig(themeKey);
@@ -120,6 +122,19 @@ const enhancePrompt = (prompt, sceneType = 'body', themeKey = 'dark_cinematic') 
         enhanced = `${themeEnhancement}. ${prompt}, ${sceneEnhancement}, ${VISUAL_ENHANCERS.composition}`;
     } else {
         enhanced = `${themeEnhancement}. ${prompt}, ${VISUAL_ENHANCERS.quality}, ${sceneEnhancement}`;
+    }
+
+    // HOOK FRAME SPECIAL TREATMENT - This is the thumbnail/first frame
+    // Apply AI-learned visual optimization for maximum scroll-stopping power
+    if (sceneType === 'hook') {
+        try {
+            const hookEnhancement = contentConfig.getVisualEnhancement('hook');
+            enhanced = `${hookEnhancement.promptAddition}. ${enhanced}`;
+            console.log(`      🎯 Applied AI-learned hook visual optimization`);
+        } catch (e) {
+            // Fallback to default hook enhancement if config not available
+            enhanced = `THUMBNAIL-OPTIMIZED: ultra eye-catching, high contrast, vibrant colors, single clear focal point, dramatic lighting, scroll-stopping visual. ${enhanced}`;
+        }
     }
 
     // Always ensure vertical aspect ratio
@@ -163,7 +178,11 @@ export const generateProImages = async (imagePrompts, options = {}) => {
         const promptText = imagePrompts[index];
         const sceneType = sceneTypes[index] || 'body';
 
-        console.log(`   👉 Generating Image ${index + 1}/${imagePrompts.length}: "${promptText.substring(0, 40)}..."`);
+        // Special logging for hook frame (first 3 seconds)
+        if (sceneType === 'hook') {
+            console.log(`   🎯 Generating HOOK IMAGE (thumbnail/first frame) - This determines if viewers stay!`);
+        }
+        console.log(`   👉 Generating Image ${index + 1}/${imagePrompts.length} [${sceneType.toUpperCase()}]: "${promptText.substring(0, 40)}..."`);
 
         let lastError;
         let success = false;
