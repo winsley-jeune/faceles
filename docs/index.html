@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Viral Shorts Generator - Scale Your Social Media Presence</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #0a0a0a;
+            color: #fff;
+            line-height: 1.6;
+        }
+        .container { max-width: 1100px; margin: 0 auto; padding: 0 20px; }
+
+        /* Header */
+        header {
+            padding: 20px 0;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+        }
+        nav { display: flex; justify-content: space-between; align-items: center; }
+        .logo { font-size: 1.5rem; font-weight: 700; }
+        .logo span { color: #8b5cf6; }
+
+        /* Hero */
+        .hero {
+            text-align: center;
+            padding: 120px 20px;
+            background: radial-gradient(ellipse at center, rgba(139,92,246,0.15) 0%, transparent 70%);
+        }
+        .hero h1 {
+            font-size: 3.5rem;
+            font-weight: 800;
+            margin-bottom: 24px;
+            background: linear-gradient(135deg, #fff 0%, #a78bfa 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .hero p {
+            font-size: 1.3rem;
+            color: #a1a1aa;
+            max-width: 600px;
+            margin: 0 auto 40px;
+        }
+        .cta-btn {
+            display: inline-block;
+            padding: 16px 40px;
+            background: linear-gradient(135deg, #8b5cf6, #6d28d9);
+            color: #fff;
+            text-decoration: none;
+            border-radius: 50px;
+            font-weight: 600;
+            font-size: 1.1rem;
+            transition: transform 0.3s, box-shadow 0.3s;
+        }
+        .cta-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 20px 40px rgba(139,92,246,0.3);
+        }
+
+        /* Stats */
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 40px;
+            padding: 80px 20px;
+            text-align: center;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+        }
+        .stat-number {
+            font-size: 3rem;
+            font-weight: 800;
+            color: #8b5cf6;
+        }
+        .stat-label { color: #71717a; margin-top: 8px; }
+
+        /* Features */
+        .features {
+            padding: 100px 20px;
+        }
+        .features h2 {
+            text-align: center;
+            font-size: 2.5rem;
+            margin-bottom: 60px;
+        }
+        .feature-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 40px;
+        }
+        .feature-card {
+            background: rgba(255,255,255,0.03);
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 16px;
+            padding: 40px;
+            transition: border-color 0.3s;
+        }
+        .feature-card:hover { border-color: #8b5cf6; }
+        .feature-card h3 {
+            font-size: 1.4rem;
+            margin-bottom: 16px;
+        }
+        .feature-card p { color: #a1a1aa; }
+
+        /* Platforms */
+        .platforms {
+            padding: 80px 20px;
+            text-align: center;
+            background: rgba(139,92,246,0.05);
+        }
+        .platforms h2 { font-size: 2rem; margin-bottom: 40px; }
+        .platform-list {
+            display: flex;
+            justify-content: center;
+            gap: 60px;
+            flex-wrap: wrap;
+        }
+        .platform-item {
+            font-size: 1.2rem;
+            color: #a1a1aa;
+        }
+
+        /* Footer */
+        footer {
+            padding: 60px 20px;
+            text-align: center;
+            border-top: 1px solid rgba(255,255,255,0.1);
+        }
+        footer a {
+            color: #71717a;
+            text-decoration: none;
+            margin: 0 20px;
+            transition: color 0.3s;
+        }
+        footer a:hover { color: #fff; }
+        .copyright {
+            margin-top: 30px;
+            color: #52525b;
+            font-size: 0.9rem;
+        }
+
+        @media (max-width: 768px) {
+            .hero h1 { font-size: 2.2rem; }
+            .stats { grid-template-columns: 1fr; gap: 30px; }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="container">
+            <nav>
+                <div class="logo">Viral<span>Shorts</span></div>
+            </nav>
+        </div>
+    </header>
+
+    <section class="hero">
+        <div class="container">
+            <h1>Scale Your Content. Dominate Social Media.</h1>
+            <p>The ultimate platform for creators and businesses to produce and distribute high-quality short-form video content across all major platforms.</p>
+            <a href="mailto:contact@viralshorts.io" class="cta-btn">Request Early Access</a>
+        </div>
+    </section>
+
+    <section class="stats">
+        <div class="container" style="display: contents;">
+            <div>
+                <div class="stat-number">10x</div>
+                <div class="stat-label">Faster Content Production</div>
+            </div>
+            <div>
+                <div class="stat-number">4+</div>
+                <div class="stat-label">Platforms Supported</div>
+            </div>
+            <div>
+                <div class="stat-number">24/7</div>
+                <div class="stat-label">Automated Publishing</div>
+            </div>
+        </div>
+    </section>
+
+    <section class="features">
+        <div class="container">
+            <h2>Built for Scale</h2>
+            <div class="feature-grid">
+                <div class="feature-card">
+                    <h3>Intelligent Content Engine</h3>
+                    <p>Our proprietary system understands trends, audience psychology, and platform algorithms to create content that performs.</p>
+                </div>
+                <div class="feature-card">
+                    <h3>Multi-Platform Distribution</h3>
+                    <p>One click to publish everywhere. Automatically optimized for each platform's unique requirements and best practices.</p>
+                </div>
+                <div class="feature-card">
+                    <h3>Brand Consistency</h3>
+                    <p>Maintain your unique voice and style across all content. Customizable templates and brand guidelines built-in.</p>
+                </div>
+                <div class="feature-card">
+                    <h3>Analytics & Insights</h3>
+                    <p>Track performance across all platforms. Data-driven recommendations to continuously improve your content strategy.</p>
+                </div>
+                <div class="feature-card">
+                    <h3>Content Calendar</h3>
+                    <p>Schedule and automate your posting strategy. Never miss the optimal posting window for maximum engagement.</p>
+                </div>
+                <div class="feature-card">
+                    <h3>Enterprise Ready</h3>
+                    <p>Built for agencies and businesses managing multiple brands. Team collaboration and approval workflows included.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="platforms">
+        <div class="container">
+            <h2>Publish Everywhere</h2>
+            <div class="platform-list">
+                <div class="platform-item">YouTube Shorts</div>
+                <div class="platform-item">TikTok</div>
+                <div class="platform-item">Instagram Reels</div>
+                <div class="platform-item">Facebook Reels</div>
+            </div>
+        </div>
+    </section>
+
+    <footer>
+        <div class="container">
+            <div>
+                <a href="terms.html">Terms of Service</a>
+                <a href="privacy.html">Privacy Policy</a>
+                <a href="mailto:contact@viralshorts.io">Contact</a>
+            </div>
+            <p class="copyright">&copy; 2024 ViralShorts. All rights reserved.</p>
+        </div>
+    </footer>
+</body>
+</html>
