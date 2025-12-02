@@ -3,7 +3,6 @@ import path from 'path';
 import http from 'http';
 import { URL } from 'url';
 import fetch from 'node-fetch';
-import FormData from 'form-data';
 
 const TOKENS_PATH = '/app/data/facebook_tokens.json';
 
@@ -58,7 +57,12 @@ export const getAuthUrl = () => {
         'pages_read_engagement',
         'pages_manage_posts',
         'publish_video',
-        'pages_read_user_content'
+        'pages_read_user_content',
+        // Instagram permissions
+        'instagram_basic',
+        'instagram_content_publish',
+        'instagram_manage_comments',
+        'instagram_manage_insights'
     ].join(',');
 
     const authUrl = `https://www.facebook.com/v19.0/dialog/oauth?` +
@@ -457,11 +461,24 @@ export const switchPage = async (pageId) => {
     };
 };
 
+/**
+ * Disconnect Facebook API - remove stored tokens
+ */
+export const disconnectFacebookAPI = () => {
+    if (fs.existsSync(TOKENS_PATH)) {
+        fs.unlinkSync(TOKENS_PATH);
+        console.log('   🔓 Facebook tokens removed');
+        return { success: true, message: 'Facebook disconnected successfully' };
+    }
+    return { success: true, message: 'No Facebook tokens to remove' };
+};
+
 export default {
     getAuthUrl,
     startOAuthServer,
     uploadToFacebookAPI,
     checkFacebookAPIStatus,
     getPages,
-    switchPage
+    switchPage,
+    disconnectFacebookAPI
 };

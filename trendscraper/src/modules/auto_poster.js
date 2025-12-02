@@ -117,32 +117,31 @@ export const postToPlatform = async (queueItem, platform) => {
         case 'youtube':
             // YouTube: Uses CAPS title format + emoji + #Shorts
             result = await uploadToYouTube(queueItem.videoPath, {
-                title: content.title,  // SEO-optimized: "Banks are LYING about Interest 📉 #Shorts"
-                description: content.fullCaption,  // Description + hashtags
+                title: content.title,
+                description: content.fullCaption,
                 hashtags: content.hashtags
             });
             break;
         case 'tiktok':
-            // TikTok: Uses question-based caption for search SEO
+
             result = await uploadToTikTok(queueItem.videoPath, {
                 title: content.title,
-                description: content.fullCaption,  // "How to calculate compound interest. #moneytok"
+                description: content.fullCaption,
                 hashtags: content.hashtags
             });
             break;
         case 'instagram':
-            // Instagram: Clean aesthetic, 3-5 strategic hashtags only
+
             result = await uploadToInstagram(queueItem.videoPath, {
-                description: content.fullCaption,  // Description + limited hashtags
+                description: content.fullCaption,
                 hashtags: content.hashtags
             });
             break;
         case 'facebook':
-            // Facebook: Conversational style + pinned comment for affiliates
             result = await uploadToFacebook(queueItem.videoPath, {
                 description: content.fullCaption,
                 hashtags: content.hashtags,
-                pinnedComment: content.pinnedComment  // "👉 Link in bio for more!"
+                pinnedComment: content.pinnedComment
             });
             break;
         default:

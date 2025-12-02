@@ -4,6 +4,7 @@ import fs from "fs";
 import path from "path";
 import fetch from "node-fetch";
 import contentConfig from "./analytics/content_config.js";
+import crossPlatform from "./analytics/cross_platform.js";
 
 // Initialize Replicate with the key passed from Docker
 const replicate = new Replicate({
@@ -80,11 +81,53 @@ const SCENE_ENHANCEMENTS = {
 };
 
 /**
- * Detect the best visual theme based on topic keywords
+ * Detect the best visual theme based on topic keywords and analytics data
+ * Now uses cross-platform analytics to prefer visual styles that have performed well
  */
 const detectVisualTheme = (topic) => {
     const topicLower = topic.toLowerCase();
 
+    // Check analytics for preferred visual styles first
+    try {
+        const patterns = crossPlatform.loadWinningPatterns();
+        const visualStyles = patterns.patterns?.visualStyles || {};
+
+        // Find the best performing visual style with enough data
+        const sortedStyles = Object.entries(visualStyles)
+            .filter(([_, data]) => data.totalCount >= 3) // Need enough samples
+            .sort((a, b) => (b[1].avgScore || 0) - (a[1].avgScore || 0));
+
+        if (sortedStyles.length > 0) {
+            const [bestStyle, data] = sortedStyles[0];
+
+            // Map analytics visual styles to our themes
+            const styleToThemeMap = {
+                'dark': 'dark_cinematic',
+                'neon': 'cyber_neon',
+                'cyber': 'cyber_neon',
+                'corporate': 'corporate_clean',
+                'clean': 'corporate_clean',
+                'warm': 'warm_organic',
+                'organic': 'warm_organic',
+                'vibrant': 'bold_vibrant',
+                'bold': 'bold_vibrant',
+                'scientific': 'scientific',
+                'finance': 'finance_noir',
+                'noir': 'finance_noir',
+                'minimalist': 'corporate_clean'
+            };
+
+            const matchedTheme = styleToThemeMap[bestStyle];
+            if (matchedTheme && VISUAL_THEMES[matchedTheme]) {
+                console.log(`   📊 Analytics suggests visual theme: ${matchedTheme} (top performing style: ${bestStyle})`);
+                return matchedTheme;
+            }
+        }
+    } catch (e) {
+        // Analytics not available, continue with keyword detection
+    }
+
+    // Fallback to keyword-based detection
     for (const [themeKey, theme] of Object.entries(VISUAL_THEMES)) {
         if (theme.bestFor.some(keyword => topicLower.includes(keyword))) {
             return themeKey;

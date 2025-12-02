@@ -1,0 +1,64 @@
+{
+  "universalWinners": [],
+  "patterns": {
+    "hooks": {},
+    "niches": {},
+    "durations": {},
+    "tones": {},
+    "visualStyles": {},
+    "postTimes": {}
+  },
+  "platformInsights": {
+    "youtube": {
+      "bestPatterns": [],
+      "avgScore": 0,
+      "totalVideos": 0,
+      "strategy": "MINIMAX",
+      "notes": "Minimize early drop-off, maximize watch time completion"
+    },
+    "tiktok": {
+      "bestPatterns": [],
+      "avgScore": 0,
+      "totalVideos": 0,
+      "strategy": "EXPECTED_VALUE",
+      "notes": "High volume, optimize for occasional viral hit"
+    },
+    "facebook": {
+      "bestPatterns": [],
+      "avgScore": 0,
+      "totalVideos": 0,
+      "strategy": "REPEATED_GAME",
+      "notes": "Consistency builds trust, shares indicate endorsement"
+    },
+    "instagram": {
+      "bestPatterns": [],
+      "avgScore": 0,
+      "totalVideos": 0,
+      "strategy": "NASH_EQUILIBRIUM",
+      "notes": "Balance follower engagement vs new viewer acquisition"
+    }
+  },
+  "mabState": {
+    "totalPulls": 0,
+    "explorationPulls": 0,
+    "exploitationPulls": 0,
+    "armStats": {},
+    "config": {
+      "explorationRate": 0.3,
+      "exploitationRate": 0.7,
+      "minSamplesForConfidence": 3,
+      "ucbConstant": 1.5,
+      "decayFactor": 0.95
+    }
+  },
+  "contentPreferences": {
+    "preferredHooks": [],
+    "preferredNiches": [],
+    "preferredDurations": {},
+    "preferredTones": [],
+    "avoidPatterns": []
+  },
+  "topScripts": [],
+  "lastUpdated": null,
+  "version": "1.0.0"
+}

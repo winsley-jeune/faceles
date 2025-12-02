@@ -1,0 +1,34 @@
+{
+  "openaiKey": "",
+  "elevenLabsKey": "",
+  "pexelsKey": "",
+  "defaultNiche": "money",
+  "defaultVoice": "nova",
+  "autoPost": true,
+  "watermark": false,
+  "notifyOnComplete": true,
+  "enabled": false,
+  "postingTimes": [
+    "09:00",
+    "18:00"
+  ],
+  "platforms": {
+    "youtube": {
+      "enabled": true,
+      "autoPost": true
+    },
+    "tiktok": {
+      "enabled": true,
+      "autoPost": true
+    },
+    "instagram": {
+      "enabled": true,
+      "autoPost": true
+    },
+    "facebook": {
+      "enabled": true,
+      "autoPost": true
+    }
+  },
+  "timezone": "America/New_York"
+}

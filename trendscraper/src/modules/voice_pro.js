@@ -1,6 +1,7 @@
 import fs from "fs";
 import path from "path";
 import fetch from "node-fetch";
+import crossPlatform from "./analytics/cross_platform.js";
 
 // Voice presets for different content types
 // Includes both male and female voices for variety
@@ -257,8 +258,9 @@ const detectContentCategory = (text) => {
 };
 
 /**
- * Select optimal voice based on content analysis
+ * Select optimal voice based on content analysis and analytics data
  * Returns the best voice preset for the detected content type
+ * Now uses cross-platform analytics to prefer tones that have performed well
  */
 const selectOptimalVoice = (text, options = {}) => {
     const { preferGender = null, preferPreset = null } = options;
@@ -266,6 +268,39 @@ const selectOptimalVoice = (text, options = {}) => {
     // If user specified a preset, use it
     if (preferPreset && VOICE_PRESETS[preferPreset]) {
         return preferPreset;
+    }
+
+    // Check analytics for preferred tones
+    try {
+        const patterns = crossPlatform.loadWinningPatterns();
+        const preferredTones = patterns.contentPreferences?.preferredTones || [];
+
+        // Map analytics tones to voice presets
+        const toneToPresetMap = {
+            'urgent': 'urgent',
+            'dramatic': 'dramatic',
+            'mysterious': 'mysterious',
+            'calm': 'female_calm',
+            'friendly': 'friendly',
+            'professional': 'female_professional',
+            'energetic': 'female_energetic',
+            'exclusive': 'mysterious',
+            'humorous': 'friendly'
+        };
+
+        // Try to match a preferred tone to a preset
+        for (const tone of preferredTones) {
+            const matchedPreset = toneToPresetMap[tone];
+            if (matchedPreset && VOICE_PRESETS[matchedPreset]) {
+                // Check gender preference
+                if (!preferGender || VOICE_PRESETS[matchedPreset].gender === preferGender) {
+                    console.log(`   📊 Analytics suggests voice: ${matchedPreset} (top performing tone: ${tone})`);
+                    return matchedPreset;
+                }
+            }
+        }
+    } catch (e) {
+        // Analytics not available, continue with default logic
     }
 
     // Detect content category

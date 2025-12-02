@@ -1,8 +1,8 @@
 {
   "version": 1,
-  "lastUpdated": "2025-11-26T17:01:10.763Z",
+  "lastUpdated": "2025-11-30T18:42:24.334Z",
   "hooks": {
-    "style": "The first 3 seconds are critical. Start with a shocking statement, a question that creates curiosity, or a visual hook that grabs attention. Test different hook styles and analyze their impact on view duration.",
+    "style": "The first 3 seconds are crucial. Start with a shocking statement, a question that creates curiosity, or a visual that demands attention. Cut out any unnecessary introductions. Immediately jump into the core of the content.",
     "patterns": [
       "I did [unexpected action] and [surprising result]",
       "[Shocking statement]... here's what happened",
@@ -17,37 +17,47 @@
   },
   "topics": {
     "focus": [
-      "Workplace stories with unexpected twists or outcomes",
-      "Content about workplace dynamics",
-      "Financial advice with a 'secret' or 'insider' twist",
-      "Stories of people bending rules to achieve success",
-      "Practical tips on improving financial situations"
+      "Psychological manipulation tactics (gaslighting, persuasion)",
+      "Hidden financial strategies and secrets",
+      "Sales tactics",
+      "Revealing hidden secrets in different fields (finance, retail, etc.)",
+      "Anecdotes of people breaking the rules and succeeding (career or life).",
+      "Exposing manipulative tactics or scams.",
+      "Specific tricks or secrets that benefit the average viewer.",
+      "Insider Secrets (e.g., company secrets, expert tips, hidden knowledge)",
+      "Stories of people breaking rules and succeeding (or facing consequences)",
+      "Exposing injustices or manipulative tactics (e.g., gaslighting, sales tricks)"
     ],
     "avoid": [
-      "Generic financial advice (e.g., 'STOP Being Broke')",
-      "Abstract or psychological topics (e.g., 'GASLIGHTING')",
-      "Vague promises of revealing wealth secrets",
-      "Broad topics with clickbaity titles that don't deliver value",
-      "Content related to GASLIGHTING (at least for now)"
+      "General self-help or motivational content without a specific, novel angle",
+      "Vague advice about wealth creation",
+      "Content lacking a clear and compelling narrative",
+      "General self-help advice.",
+      "Vague lifestyle advice.",
+      "Generic statements about wealth or success.",
+      "Content lacking a clear and immediate benefit for the viewer.",
+      "General advice on wealth or lifestyle changes",
+      "Vague or philosophical topics (e.g., confidence, truth)",
+      "Any topic that lacks a clear, compelling hook in the first 3 seconds"
     ],
     "suggested": [
       {
-        "topic": "Financial SECRETS Banks Don't Want You To Know",
-        "niche": "money",
-        "reason": "Capitalizes on the 'insider knowledge' angle that performed well.",
-        "addedAt": "2025-11-26T17:01:10.763Z"
+        "topic": "Company CEO SECRETLY Cuts Pay, Gets CAUGHT!",
+        "niche": "general",
+        "reason": "Combines the elements of a company boss, breaking rules, and a secret.",
+        "addedAt": "2025-11-30T18:42:24.334Z"
       },
       {
-        "topic": "I Broke These Rules To Get My Dream Job",
-        "niche": "general",
-        "reason": "Appeals to a broader audience with relatable career aspirations, while still leveraging the 'rule-breaking' concept.",
-        "addedAt": "2025-11-26T17:01:10.763Z"
+        "topic": "Therapist Exposes the Most Common Gaslighting Tactics!",
+        "niche": "psychology",
+        "reason": "Capitalizes on the success of the 'GASLIGHTING' video and provides actionable information.",
+        "addedAt": "2025-11-30T18:42:24.334Z"
       },
       {
-        "topic": "Cashier Pranks Annoying Customer (Satisfying)",
+        "topic": "I Used AI to Write My Essays & Got A+! (Here's How)",
         "niche": "general",
-        "reason": "Taps into the same vein as the top performer, but focuses on instant karma rather than promotion, which might have broader appeal. Satisfying/Revenge theme always trends well.",
-        "addedAt": "2025-11-26T17:01:10.763Z"
+        "reason": "Interesting new topic that contains the secret sauce.",
+        "addedAt": "2025-11-30T18:42:24.334Z"
       }
     ],
     "niches": {
@@ -63,7 +73,7 @@
     "maxLength": 70,
     "useNumbers": true,
     "useEmojis": false,
-    "guidance": "Continue using emojis and relevant hashtags. A/B test different title structures and keywords to see what generates the highest CTR. Ensure the title accurately reflects the video's content."
+    "guidance": "Use strong, attention-grabbing words (e.g., SHOCKING, SECRET, EXPOSED, CRAZY). Incorporate relevant emojis to enhance visual appeal. Keep titles concise and to the point."
   },
   "contentStyle": {
     "tone": "storytelling",
@@ -76,10 +86,10 @@
     "optimalTimes": [],
     "frequency": "2-3 per day",
     "bestDays": [],
-    "guidance": "Experiment with different posting times to see when your audience is most active. Analyze the performance of videos posted at different times and adjust the schedule accordingly. Consistency is key, so aim for a regular posting schedule (e.g., daily or every other day)."
+    "guidance": "Experiment with posting times to identify when your audience is most active. Consistency is key. Aim for at least 1-3 videos per day, but don't sacrifice quality for quantity."
   },
   "benchmarks": {
-    "targetViews": 50,
+    "targetViews": 750,
     "targetLikes": 50,
     "targetWatchTime": 70,
     "currentAvgViews": 0
@@ -135,7 +145,55 @@
         "Topics to focus: Workplace stories with unexpected twists or outcomes, Content about workplace dynamics, Financial advice with a 'secret' or 'insider' twist",
         "Priority: Analyze and replicate the elements that made 'Cashier Broke Rules...' successful. Focus on a compelling hook, valuable content, and clear takeaway."
       ]
+    },
+    {
+      "date": "2025-11-30T02:57:26.804Z",
+      "insights": [
+        "The \"Cashier Broke Rules\" video significantly outperforms all others.",
+        "Titles that create curiosity and hint at hidden information perform better.",
+        "Many videos have very low views, indicating a problem with initial engagement (hook)."
+      ],
+      "changes": [
+        "Topics to focus: Workplace stories with unexpected twists or outcomes, Content about workplace dynamics, Financial advice with a 'secret' or 'insider' twist",
+        "Priority: Improve video hooks to increase initial engagement."
+      ]
+    },
+    {
+      "date": "2025-11-30T17:46:56.687Z",
+      "insights": [
+        "The 'Cashier Broke Rules' video significantly outperforms all others, indicating a strong interest in stories about workplace dynamics and perceived injustice.",
+        "Videos with titles promising 'secrets' and insider knowledge attract more views than general advice videos.",
+        "Videos released more recently are not necessarily performing better. This suggests a hook/content problem, not just a discovery/algorithm problem."
+      ],
+      "changes": [
+        "Topics to focus: Financial advice with a 'secret' or 'insider' twist, Stories of people bending rules to achieve success, Practical tips on improving financial situations",
+        "Priority: Improving the hook (first 3 seconds) of each Short to increase watch time and viewer retention."
+      ]
+    },
+    {
+      "date": "2025-11-30T18:37:55.264Z",
+      "insights": [
+        "Strong hooks and intriguing titles drive views.",
+        "Specific actionable advice performs better than general advice.",
+        "Relevance of content seems inconsistent"
+      ],
+      "changes": [
+        "Topics to focus: Exposing unconventional practices or 'rule-breaking' scenarios, Psychological tricks or manipulation, Workplace dynamics (especially instances of unfairness or rule-breaking)",
+        "Priority: Improve video hooks to increase initial viewer retention and CTR."
+      ]
+    },
+    {
+      "date": "2025-11-30T18:42:24.334Z",
+      "insights": [
+        "Secrets and Rule Breaking are working",
+        "Emotional titles and topics do better",
+        "Poor title design and lack of intrigue are hurting performance."
+      ],
+      "changes": [
+        "Topics to focus: Psychological manipulation tactics (gaslighting, persuasion), Hidden financial strategies and secrets, Sales tactics",
+        "Priority: Improve video hooks and titles to drastically increase click-through rate and views."
+      ]
     }
   ],
-  "currentPriority": "Analyze and replicate the elements that made 'Cashier Broke Rules...' successful. Focus on a compelling hook, valuable content, and clear takeaway."
+  "currentPriority": "Improve video hooks and titles to drastically increase click-through rate and views."
 }

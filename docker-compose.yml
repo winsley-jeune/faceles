@@ -5,6 +5,8 @@ services:
     ports:
       - "3000:3000"
       - "8085:8085"             # YouTube OAuth callback
+      - "8086:8086"             # Facebook OAuth callback
+      - "8087:8087"             # TikTok OAuth callback
     environment:
       - GEMINI_API_KEY=${GEMINI_API_KEY}
       - REPLICATE_API_TOKEN=${REPLICATE_API_TOKEN}
@@ -13,6 +15,10 @@ services:
       - COQUI_SPEAKER_ID=${COQUI_SPEAKER_ID}
       - YOUTUBE_CLIENT_ID=${YOUTUBE_CLIENT_ID}
       - YOUTUBE_CLIENT_SECRET=${YOUTUBE_CLIENT_SECRET}
+      - FACEBOOK_APP_ID=${FACEBOOK_APP_ID}
+      - FACEBOOK_APP_SECRET=${FACEBOOK_APP_SECRET}
+      - TIKTOK_CLIENT_KEY=${TIKTOK_CLIENT_KEY}
+      - TIKTOK_CLIENT_SECRET=${TIKTOK_CLIENT_SECRET}
     volumes:
       - ./videos:/app/videos
       - ./trendscraper/src/modules:/app/modules

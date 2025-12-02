@@ -1,5 +1,7 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import contentConfig from "./analytics/content_config.js";
+import brandContext from "./brand_context.js";
+import crossPlatform from "./analytics/cross_platform.js";
 
 // --- ROBUST PARSER (Text-Based, No JSON headaches) ---
 const parseRobustScript = (text) => {
@@ -59,12 +61,97 @@ export const generateNicheStoryboard = async (niche, topic) => {
         console.log("   ℹ️ No content config yet, using defaults");
     }
 
+    // GET CROSS-PLATFORM WINNING PATTERNS (Few-Shot Learning)
+    let winningPatternsPrompt = "";
+    let contentRecommendation = null;
+    try {
+        winningPatternsPrompt = crossPlatform.generateUnifiedPrompt();
+        contentRecommendation = crossPlatform.getContentRecommendation();
+        if (winningPatternsPrompt && winningPatternsPrompt.includes("Universal Winners")) {
+            console.log("   🎯 Applying cross-platform winning patterns...");
+        }
+    } catch (e) {
+        console.log("   ℹ️ No cross-platform analytics yet, will learn from future posts");
+    }
+
+    // GET BRAND CONTEXT (if configured)
+    let brandSummary = "";
+    let contentGoal = "";
+    let ctaInstruction = "";
+    try {
+        brandSummary = brandContext.generateBrandSummary();
+        if (brandSummary) {
+            console.log("   🏢 Applying brand context to script generation...");
+
+            const ctx = brandContext.generatePromptContext();
+            if (ctx) {
+                contentGoal = ctx.primaryGoal;
+
+                // Get appropriate CTA based on content goal
+                const ctaTemplates = brandContext.getCTATemplates(contentGoal);
+                if (ctaTemplates && ctaTemplates.length > 0) {
+                    ctaInstruction = `\nCALL TO ACTION STYLE: "${ctaTemplates[0]}" (adapt to fit naturally)`;
+                }
+            }
+        }
+    } catch (e) {
+        console.log("   ℹ️ No brand context configured, using generic content");
+    }
+
+    // Build content goal-specific instructions
+    let goalInstructions = "";
+    switch (contentGoal) {
+        case 'direct-sales':
+            goalInstructions = `
+CONTENT GOAL: DRIVE SALES
+- Focus on product benefits and transformation
+- Create desire and urgency
+- Address objections throughout
+- End with a clear purchase CTA`;
+            break;
+        case 'lead-generation':
+            goalInstructions = `
+CONTENT GOAL: GENERATE LEADS
+- Provide immense value upfront (80% value, 20% pitch)
+- Tease additional resources available
+- End with a lead magnet CTA (free guide, checklist, etc.)`;
+            break;
+        case 'engagement':
+            goalInstructions = `
+CONTENT GOAL: DRIVE ENGAGEMENT
+- Ask questions viewers want to answer
+- Create debate or discussion topics
+- End with a question to boost comments`;
+            break;
+        default: // brand-awareness
+            goalInstructions = `
+CONTENT GOAL: BUILD BRAND AWARENESS
+- Lead with value and entertainment
+- Subtly weave in brand expertise
+- End with follow CTA for more content`;
+    }
+
+    // Build strategy instruction based on recommendation
+    let strategyInstruction = "";
+    if (contentRecommendation) {
+        if (contentRecommendation.strategy === 'EXPLOIT' && contentRecommendation.confidence !== 'low') {
+            strategyInstruction = `\nSTRATEGY: Use PROVEN patterns from analytics data below.`;
+        } else {
+            strategyInstruction = `\nSTRATEGY: EXPLORE - Try a fresh approach. Experiment with new hooks or formats.`;
+        }
+    }
+
     const prompt = `
-    You are a viral educational content creator specializing in YouTube Shorts.
+    You are a viral content creator specializing in YouTube Shorts.
     TOPIC: "${topic}"
     NICHE: "${niche}"
 
+    ${brandSummary ? `\n${brandSummary}\n` : ''}
+    ${goalInstructions}
+    ${ctaInstruction}
     ${optimizationRules}
+    ${winningPatternsPrompt ? `\n--- ANALYTICS DATA (Learn from past performance) ---\n${winningPatternsPrompt}\n--- END ANALYTICS ---\n` : ''}
+    ${strategyInstruction}
 
     Write a 2-MINUTE script (15-20 scenes). Each scene should be 5-10 seconds.
 
@@ -72,6 +159,7 @@ export const generateNicheStoryboard = async (niche, topic) => {
     The first 3 seconds determine if viewers stay or swipe away.
     Start with something that creates IMMEDIATE curiosity or shock.
     DO NOT start with "In this video" or "Today we'll learn" - that's a guaranteed swipe.
+    ${brandSummary ? 'Hook should be relevant to the target audience pain points.' : ''}
 
     STRICT OUTPUT FORMAT (one scene per line):
     Duration | Narration Text | Visual Description
@@ -87,6 +175,7 @@ export const generateNicheStoryboard = async (niche, topic) => {
     - Make it educational and engaging throughout
     - The FIRST SCENE is the most important - it must HOOK immediately
     - Use storytelling and unexpected outcomes when possible
+    ${brandSummary ? '- Match the brand voice and tone specified above\n    - The final scene should include a CTA that matches the content goal' : ''}
   `;
 
     // --- THE RETRY LOOP ---

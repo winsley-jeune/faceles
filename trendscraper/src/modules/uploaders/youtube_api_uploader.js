@@ -344,11 +344,24 @@ export const getQuotaStatus = () => {
     };
 };
 
+/**
+ * Disconnect YouTube API - remove stored tokens
+ */
+export const disconnectYouTubeAPI = () => {
+    if (fs.existsSync(TOKENS_PATH)) {
+        fs.unlinkSync(TOKENS_PATH);
+        console.log('   🔓 YouTube tokens removed');
+        return { success: true, message: 'YouTube disconnected successfully' };
+    }
+    return { success: true, message: 'No YouTube tokens to remove' };
+};
+
 export default {
     getAuthUrl,
     startOAuthServer,
     exchangeCode,
     uploadToYouTubeAPI,
     checkYouTubeAPIStatus,
-    getQuotaStatus
+    getQuotaStatus,
+    disconnectYouTubeAPI
 };

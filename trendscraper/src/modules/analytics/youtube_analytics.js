@@ -4,11 +4,34 @@ import path from 'path';
 
 const TOKENS_PATH = '/app/data/youtube_tokens.json';
 const ANALYTICS_PATH = '/app/data/analytics_history.json';
+const WINNERS_PATH = '/app/data/winning_patterns.json';
 
 /**
- * YouTube Analytics Fetcher (Lightweight Version)
- * Fetches video performance data for analysis
+ * YouTube Analytics - MINIMAX Strategy
+ *
+ * Game Theory: Minimize early drop-off, Maximize completion rate
+ * Key Metrics: Watch time, retention %, completion rate
+ *
+ * YouTube's algorithm rewards:
+ * - High average view duration
+ * - High completion rate (% of video watched)
+ * - Session time (do viewers stay on YouTube after your video?)
+ *
+ * Our strategy:
+ * - Track retention patterns per video type
+ * - Identify which hooks keep viewers past 3 seconds
+ * - Find optimal video length for completion rate
+ * - Store production variables (voice, visuals, style) with performance
  */
+
+// Performance thresholds for YouTube Shorts
+const YOUTUBE_THRESHOLDS = {
+    VIRAL: 1000,        // Views
+    GOOD: 500,
+    AVERAGE: 200,
+    POOR: 100,
+    RETENTION_TARGET: 70  // % watched target
+};
 
 /**
  * Load saved OAuth tokens
@@ -297,6 +320,313 @@ export const getWeekOverWeekComparison = () => {
     };
 };
 
+// ============================================================
+// WINNING PATTERNS STORAGE (Few-Shot Learning System)
+// ============================================================
+
+/**
+ * Load winning patterns data
+ */
+export const loadWinningPatterns = () => {
+    if (fs.existsSync(WINNERS_PATH)) {
+        return JSON.parse(fs.readFileSync(WINNERS_PATH, 'utf8'));
+    }
+    return {
+        platform: 'youtube',
+        strategy: 'minimax',
+        winners: [],
+        patterns: {
+            hooks: {},
+            niches: {},
+            durations: {},
+            voices: {},
+            visualStyles: {},
+            postingTimes: {}
+        },
+        lastUpdated: null
+    };
+};
+
+/**
+ * Save winning patterns data
+ */
+const saveWinningPatterns = (data) => {
+    data.lastUpdated = new Date().toISOString();
+    const dir = path.dirname(WINNERS_PATH);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(WINNERS_PATH, JSON.stringify(data, null, 2));
+};
+
+/**
+ * Extract content patterns from video title/data
+ */
+const extractPatterns = (video) => {
+    const title = video.title || '';
+    const patterns = {
+        hookStyle: 'general',
+        niche: 'general',
+        duration: 'unknown',
+        titlePatterns: []
+    };
+
+    // Hook style detection
+    if (/broke.*rules?|rule.*break/i.test(title)) patterns.hookStyle = 'rule-breaking';
+    else if (/secret|hide|hidden/i.test(title)) patterns.hookStyle = 'secrets';
+    else if (/don'?t want you to know/i.test(title)) patterns.hookStyle = 'insider';
+    else if (/shocking|insane|crazy/i.test(title)) patterns.hookStyle = 'shock';
+    else if (/trick|hack|tip/i.test(title)) patterns.hookStyle = 'tips';
+    else if (/\d+%/i.test(title)) patterns.hookStyle = 'statistic';
+    else if (/truth|real/i.test(title)) patterns.hookStyle = 'truth-reveal';
+
+    // Niche detection
+    if (/money|finance|bank|rich|broke|wealth|savings/i.test(title)) patterns.niche = 'finance';
+    else if (/psychology|psych|gaslighting|manipulation/i.test(title)) patterns.niche = 'psychology';
+    else if (/sales|retail|store|customer/i.test(title)) patterns.niche = 'business';
+    else if (/job|work|career|boss|employee|promote/i.test(title)) patterns.niche = 'career';
+
+    // Duration category (parse ISO 8601)
+    if (video.duration) {
+        const match = video.duration.match(/PT(?:(\d+)M)?(?:(\d+)S)?/);
+        if (match) {
+            const totalSeconds = (parseInt(match[1] || 0) * 60) + parseInt(match[2] || 0);
+            if (totalSeconds <= 30) patterns.duration = 'short-30s';
+            else if (totalSeconds <= 45) patterns.duration = 'medium-45s';
+            else if (totalSeconds <= 60) patterns.duration = 'standard-60s';
+            else if (totalSeconds <= 90) patterns.duration = 'long-90s';
+            else patterns.duration = 'extra-long';
+        }
+    }
+
+    // Title patterns
+    if (/[\u{1F600}-\u{1F9FF}]/u.test(title)) patterns.titlePatterns.push('has-emoji');
+    if (/\b[A-Z]{2,}\b/.test(title)) patterns.titlePatterns.push('has-caps');
+    if (/\d/.test(title)) patterns.titlePatterns.push('has-numbers');
+    if (/!/.test(title)) patterns.titlePatterns.push('has-exclamation');
+    if (/\?/.test(title)) patterns.titlePatterns.push('has-question');
+
+    return patterns;
+};
+
+/**
+ * Calculate MINIMAX score for a video
+ * Minimize: Early drop-off (low retention)
+ * Maximize: Completion rate, engagement
+ */
+export const calculateMinimaxScore = (video) => {
+    const views = video.stats?.views || 0;
+    const likes = video.stats?.likes || 0;
+    const comments = video.stats?.comments || 0;
+    const daysSincePublished = video.daysSincePublished || 1;
+    const retention = video.retention || null; // From YouTube Analytics API
+
+    // Base score from views
+    let score = 0;
+    if (views >= YOUTUBE_THRESHOLDS.VIRAL) score = 2;
+    else if (views >= YOUTUBE_THRESHOLDS.GOOD) score = 1;
+    else if (views >= YOUTUBE_THRESHOLDS.AVERAGE) score = 0;
+    else if (views >= YOUTUBE_THRESHOLDS.POOR) score = -1;
+    else score = -2;
+
+    // Engagement bonus (likes + comments relative to views)
+    const engagementRate = views > 0 ? ((likes + comments) / views) * 100 : 0;
+    if (engagementRate >= 5) score += 0.5;
+    else if (engagementRate >= 3) score += 0.25;
+    else if (engagementRate < 1) score -= 0.25;
+
+    // Retention bonus (if available)
+    if (retention !== null) {
+        if (retention >= 80) score += 0.5;
+        else if (retention >= YOUTUBE_THRESHOLDS.RETENTION_TARGET) score += 0.25;
+        else if (retention < 40) score -= 0.5;
+    }
+
+    // Velocity bonus for new content
+    if (daysSincePublished <= 3) {
+        const viewsPerDay = views / Math.max(daysSincePublished, 1);
+        if (viewsPerDay >= 200) score += 0.5;
+        else if (viewsPerDay >= 100) score += 0.25;
+        else if (viewsPerDay < 20) score -= 0.25;
+    }
+
+    return {
+        score: Math.max(-2, Math.min(2, score)),
+        label: score >= 1.5 ? 'VIRAL' : score >= 0.5 ? 'GOOD' : score >= -0.5 ? 'AVERAGE' : score >= -1.5 ? 'POOR' : 'FLOP',
+        metrics: { views, likes, comments, engagementRate: engagementRate.toFixed(2), retention, daysSincePublished }
+    };
+};
+
+/**
+ * Update winning patterns from video performance data
+ */
+export const updateWinningPatterns = (videos, productionData = {}) => {
+    const data = loadWinningPatterns();
+    let newWinners = 0;
+
+    videos.forEach(video => {
+        const views = video.stats?.views || 0;
+        const scoreData = calculateMinimaxScore(video);
+        const patterns = extractPatterns(video);
+
+        // Check if this is a winner (views >= threshold)
+        if (views >= YOUTUBE_THRESHOLDS.AVERAGE) {
+            const existingWinner = data.winners.find(w => w.videoId === video.videoId);
+
+            if (!existingWinner) {
+                // New winner!
+                data.winners.push({
+                    videoId: video.videoId,
+                    title: video.title,
+                    views: views,
+                    likes: video.stats?.likes || 0,
+                    score: scoreData.score,
+                    scoreLabel: scoreData.label,
+                    patterns: patterns,
+                    production: productionData[video.videoId] || null,
+                    publishedAt: video.publishedAt,
+                    addedAt: new Date().toISOString()
+                });
+                newWinners++;
+                console.log(`   🏆 YouTube winner: "${video.title}" (${views} views, score: ${scoreData.score})`);
+            } else {
+                // Update existing winner
+                existingWinner.views = views;
+                existingWinner.likes = video.stats?.likes || 0;
+                existingWinner.score = scoreData.score;
+                existingWinner.scoreLabel = scoreData.label;
+                existingWinner.updatedAt = new Date().toISOString();
+            }
+        }
+
+        // Update pattern statistics
+        const updatePatternStats = (category, key, score) => {
+            if (!data.patterns[category][key]) {
+                data.patterns[category][key] = { totalScore: 0, count: 0, wins: 0, avgScore: 0 };
+            }
+            data.patterns[category][key].totalScore += score;
+            data.patterns[category][key].count += 1;
+            if (score > 0) data.patterns[category][key].wins += 1;
+            data.patterns[category][key].avgScore =
+                data.patterns[category][key].totalScore / data.patterns[category][key].count;
+        };
+
+        updatePatternStats('hooks', patterns.hookStyle, scoreData.score);
+        updatePatternStats('niches', patterns.niche, scoreData.score);
+        updatePatternStats('durations', patterns.duration, scoreData.score);
+
+        // Track posting time
+        if (video.publishedAt) {
+            const hour = new Date(video.publishedAt).getUTCHours();
+            const timeSlot = hour < 6 ? 'night' : hour < 12 ? 'morning' : hour < 18 ? 'afternoon' : 'evening';
+            updatePatternStats('postingTimes', timeSlot, scoreData.score);
+        }
+    });
+
+    // Sort winners by score and keep top 20
+    data.winners.sort((a, b) => b.score - a.score);
+    data.winners = data.winners.slice(0, 20);
+
+    saveWinningPatterns(data);
+
+    if (newWinners > 0) {
+        console.log(`   📊 YouTube: ${newWinners} new winner(s) added`);
+    }
+
+    return data;
+};
+
+/**
+ * Get top N winners for few-shot examples
+ */
+export const getTopWinners = (count = 3) => {
+    const data = loadWinningPatterns();
+    return data.winners.slice(0, count);
+};
+
+/**
+ * Get best performing patterns (for content generation)
+ */
+export const getBestPatterns = () => {
+    const data = loadWinningPatterns();
+
+    const getBestInCategory = (category) => {
+        const items = Object.entries(data.patterns[category] || {});
+        if (items.length === 0) return null;
+        items.sort((a, b) => b[1].avgScore - a[1].avgScore);
+        return items[0];
+    };
+
+    return {
+        bestHook: getBestInCategory('hooks'),
+        bestNiche: getBestInCategory('niches'),
+        bestDuration: getBestInCategory('durations'),
+        bestPostingTime: getBestInCategory('postingTimes'),
+        bestVoice: getBestInCategory('voices'),
+        bestVisualStyle: getBestInCategory('visualStyles')
+    };
+};
+
+/**
+ * Generate few-shot prompt from YouTube winners
+ */
+export const generateFewShotPrompt = () => {
+    const winners = getTopWinners(3);
+    const bestPatterns = getBestPatterns();
+
+    if (winners.length === 0) {
+        return '';
+    }
+
+    let prompt = `
+--- YOUTUBE WINNERS (MINIMAX Strategy: High retention + completion) ---
+Learn from these top-performing YouTube Shorts:
+
+`;
+
+    winners.forEach((w, i) => {
+        prompt += `WINNER #${i + 1} (${w.views} views, score: ${w.score}):
+Title: "${w.title}"
+Hook Style: ${w.patterns?.hookStyle || 'unknown'}
+Niche: ${w.patterns?.niche || 'general'}
+${w.production?.voiceId ? `Voice: ${w.production.voiceId}` : ''}
+---
+`;
+    });
+
+    if (bestPatterns.bestHook) {
+        prompt += `\nBEST HOOK STYLE: ${bestPatterns.bestHook[0]} (avg score: ${bestPatterns.bestHook[1].avgScore.toFixed(2)})`;
+    }
+    if (bestPatterns.bestNiche) {
+        prompt += `\nBEST NICHE: ${bestPatterns.bestNiche[0]} (avg score: ${bestPatterns.bestNiche[1].avgScore.toFixed(2)})`;
+    }
+    if (bestPatterns.bestDuration) {
+        prompt += `\nBEST DURATION: ${bestPatterns.bestDuration[0]} (avg score: ${bestPatterns.bestDuration[1].avgScore.toFixed(2)})`;
+    }
+
+    prompt += `
+
+FOR YOUTUBE: Focus on strong hooks (first 3 sec) and high completion rate.
+`;
+
+    return prompt;
+};
+
+/**
+ * Store production data for a video (call this when video is created)
+ */
+export const storeProductionData = (videoId, productionInfo) => {
+    const data = loadWinningPatterns();
+
+    // Find if video exists in winners
+    const winner = data.winners.find(w => w.videoId === videoId);
+    if (winner) {
+        winner.production = productionInfo;
+        saveWinningPatterns(data);
+        console.log(`   💾 Production data stored for: ${videoId}`);
+    }
+
+    return data;
+};
+
 export default {
     getChannelVideos,
     getVideoStats,
@@ -305,5 +635,14 @@ export default {
     loadAnalyticsHistory,
     saveAnalyticsSnapshot,
     saveAnalysis,
-    getWeekOverWeekComparison
+    getWeekOverWeekComparison,
+    // New exports for game theory system
+    loadWinningPatterns,
+    calculateMinimaxScore,
+    updateWinningPatterns,
+    getTopWinners,
+    getBestPatterns,
+    generateFewShotPrompt,
+    storeProductionData,
+    YOUTUBE_THRESHOLDS
 };

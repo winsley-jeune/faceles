@@ -1,0 +1,89 @@
+{
+  "version": 1,
+  "lastUpdated": null,
+  "onboardingComplete": false,
+  "business": {
+    "name": "",
+    "type": "",
+    "industry": "",
+    "description": "",
+    "uniqueValue": "",
+    "website": ""
+  },
+  "products": [],
+  "targetAudience": {
+    "demographics": "",
+    "painPoints": [],
+    "desires": [],
+    "awareness": "problem-aware"
+  },
+  "brandVoice": {
+    "tone": "professional",
+    "personality": [],
+    "keywords": [],
+    "avoidWords": []
+  },
+  "contentGoals": {
+    "primary": "brand-awareness",
+    "secondary": [],
+    "callToActions": []
+  },
+  "templates": {
+    "ctaTemplates": {
+      "brand-awareness": [
+        "Follow for more {industry} insights",
+        "Share this if you found it valuable",
+        "Comment your thoughts below"
+      ],
+      "lead-generation": [
+        "Link in bio for your free {offer}",
+        "DM '{keyword}' to get started",
+        "Comment '{keyword}' for the free guide"
+      ],
+      "direct-sales": [
+        "Shop now - link in bio",
+        "Use code {code} for {discount}% off",
+        "Limited time offer - link in bio"
+      ],
+      "engagement": [
+        "What do you think? Comment below",
+        "Tag someone who needs to see this",
+        "Save this for later"
+      ]
+    },
+    "hookTemplates": {
+      "ecommerce": [
+        "Stop scrolling if you're still {pain_point}...",
+        "The {product_category} that changed everything",
+        "{Number} customers can't be wrong about {product}"
+      ],
+      "coaching": [
+        "I helped {number}+ {audience} achieve {result}",
+        "The {topic} mistake costing you {loss}",
+        "Why {common_belief} is keeping you stuck"
+      ]
+    }
+  },
+  "industryPresets": {
+    "ecommerce": {
+      "contentGoals": ["direct-sales", "brand-awareness"],
+      "tones": ["friendly", "authentic", "urgent"],
+      "ctaFocus": "product-driven"
+    },
+    "coaching": {
+      "contentGoals": ["lead-generation", "authority"],
+      "tones": ["authoritative", "empathetic", "motivational"],
+      "ctaFocus": "value-driven"
+    },
+    "saas": {
+      "contentGoals": ["lead-generation", "education"],
+      "tones": ["professional", "helpful", "innovative"],
+      "ctaFocus": "demo-driven"
+    },
+    "agency": {
+      "contentGoals": ["lead-generation", "case-studies"],
+      "tones": ["professional", "results-focused", "confident"],
+      "ctaFocus": "consultation-driven"
+    }
+  }
+}
