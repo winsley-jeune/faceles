@@ -27,13 +27,16 @@ const api = {
     return response.json();
   },
 
-  async handleOAuthCallback(provider, code) {
+  async handleOAuthCallback(provider, code, state) {
     const response = await fetch(`${API_BASE}/auth/${provider}/callback`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ code }),
+      body: JSON.stringify({ code, state }),
     });
-    if (!response.ok) throw new Error('OAuth callback failed');
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({}));
+      throw new Error(error.error || 'OAuth callback failed');
+    }
     return response.json();
   },
 
@@ -68,6 +71,51 @@ const api = {
   async getAnalytics() {
     const response = await fetch(`${API_BASE}/analytics/videos`);
     if (!response.ok) throw new Error('Failed to fetch analytics');
+    return response.json();
+  },
+
+  async getBestNiche() {
+    const response = await fetch(`${API_BASE}/analytics/best-niche`, {
+      headers: getAuthHeaders(),
+    });
+    if (!response.ok) throw new Error('Failed to get best niche');
+    return response.json();
+  },
+
+  async getOptimalStrategy() {
+    const response = await fetch(`${API_BASE}/analytics/optimal-strategy`);
+    if (!response.ok) throw new Error('Failed to get optimal strategy');
+    return response.json();
+  },
+
+  // ============ Viral Intelligence ============
+  async getViralIntelligence() {
+    const response = await fetch(`${API_BASE}/analytics/viral-intelligence`);
+    if (!response.ok) throw new Error('Failed to get viral intelligence');
+    return response.json();
+  },
+
+  async getOutliers() {
+    const response = await fetch(`${API_BASE}/analytics/outliers`);
+    if (!response.ok) throw new Error('Failed to get outliers');
+    return response.json();
+  },
+
+  async getViralScores() {
+    const response = await fetch(`${API_BASE}/analytics/viral-scores`);
+    if (!response.ok) throw new Error('Failed to get viral scores');
+    return response.json();
+  },
+
+  async getRecommendedPattern() {
+    const response = await fetch(`${API_BASE}/analytics/recommended-pattern`);
+    if (!response.ok) throw new Error('Failed to get recommended pattern');
+    return response.json();
+  },
+
+  async getKilledPatterns() {
+    const response = await fetch(`${API_BASE}/analytics/killed-patterns`);
+    if (!response.ok) throw new Error('Failed to get killed patterns');
     return response.json();
   },
 
@@ -315,22 +363,26 @@ const api = {
 
   // ============ Smart YouTube Generation ============
   async getSmartTopic(niche = 'general') {
-    const response = await fetch(`${API_BASE}/smart/topic?niche=${niche}`);
+    const response = await fetch(`${API_BASE}/smart/topic?niche=${niche}`, {
+      headers: getAuthHeaders(),
+    });
     if (!response.ok) throw new Error('Failed to get smart topic');
     return response.json();
   },
 
   async getSmartPatterns() {
-    const response = await fetch(`${API_BASE}/smart/patterns`);
+    const response = await fetch(`${API_BASE}/smart/patterns`, {
+      headers: getAuthHeaders(),
+    });
     if (!response.ok) throw new Error('Failed to get smart patterns');
     return response.json();
   },
 
-  async createSmartVideoForYouTube(niche = 'general') {
+  async createSmartVideoForYouTube(niche = 'general', topic = null) {
     const response = await fetch(`${API_BASE}/smart/create-and-post`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ niche }),
+      body: JSON.stringify({ niche, ...(topic && { topic }) }),
     });
     if (!response.ok) throw new Error('Failed to create smart video');
     return response.json();
@@ -352,6 +404,147 @@ const api = {
     });
     if (!response.ok) throw new Error('Failed to pull YouTube analytics');
     return response.json();
+  },
+
+  // ============ Smart Facebook Generation ============
+  async getFacebookSmartTopic(niche = 'general') {
+    const response = await fetch(`${API_BASE}/facebook/smart/topic?niche=${niche}`);
+    if (!response.ok) throw new Error('Failed to get Facebook smart topic');
+    return response.json();
+  },
+
+  async getFacebookSmartPatterns() {
+    const response = await fetch(`${API_BASE}/facebook/smart/patterns`);
+    if (!response.ok) throw new Error('Failed to get Facebook patterns');
+    return response.json();
+  },
+
+  async createSmartVideoForFacebook(niche = 'general', topic = null) {
+    const response = await fetch(`${API_BASE}/facebook/smart/create-and-post`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ niche, ...(topic && { topic }) }),
+    });
+    if (!response.ok) throw new Error('Failed to create Facebook smart video');
+    return response.json();
+  },
+
+  async pullFacebookAnalytics() {
+    const response = await fetch(`${API_BASE}/facebook-api/pull-analytics`, {
+      method: 'POST',
+    });
+    if (!response.ok) throw new Error('Failed to pull Facebook analytics');
+    return response.json();
+  },
+
+  async pullTikTokAnalytics() {
+    const response = await fetch(`${API_BASE}/tiktok-api/pull-analytics`, {
+      method: 'POST',
+    });
+    if (!response.ok) throw new Error('Failed to pull TikTok analytics');
+    return response.json();
+  },
+
+  async pullInstagramAnalytics() {
+    const response = await fetch(`${API_BASE}/instagram-api/pull-analytics`, {
+      method: 'POST',
+    });
+    if (!response.ok) throw new Error('Failed to pull Instagram analytics');
+    return response.json();
+  },
+
+  // ============ Multi-Platform Smart Generation ============
+  async createSmartVideo(niche = 'general', platforms = ['youtube'], topic = null) {
+    const results = {};
+
+    for (const platform of platforms) {
+      try {
+        if (platform === 'youtube') {
+          const response = await fetch(`${API_BASE}/smart/create-and-post`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ niche, topic }),
+          });
+          if (!response.ok) throw new Error('Failed to create YouTube smart video');
+          results[platform] = await response.json();
+        } else if (platform === 'facebook') {
+          const response = await fetch(`${API_BASE}/facebook/smart/create-and-post`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ niche, topic }),
+          });
+          if (!response.ok) throw new Error('Failed to create Facebook smart video');
+          results[platform] = await response.json();
+        } else if (platform === 'instagram') {
+          const response = await fetch(`${API_BASE}/instagram/smart/create-and-post`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ niche, topic }),
+          });
+          if (!response.ok) throw new Error('Failed to create Instagram smart video');
+          results[platform] = await response.json();
+        } else if (platform === 'tiktok') {
+          const response = await fetch(`${API_BASE}/tiktok/smart/create-and-post`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ niche, topic }),
+          });
+          if (!response.ok) throw new Error('Failed to create TikTok smart video');
+          results[platform] = await response.json();
+        } else {
+          results[platform] = {
+            status: 'pending',
+            message: `${platform} smart generation not available`
+          };
+        }
+      } catch (err) {
+        results[platform] = { error: err.message };
+      }
+    }
+
+    return results;
+  },
+
+  async getPlatformAnalytics(platform) {
+    const endpoints = {
+      youtube: '/youtube-api/pull-analytics',
+      tiktok: '/tiktok-api/analytics',
+      facebook: '/facebook-api/analytics',
+      instagram: '/instagram-api/analytics',
+    };
+
+    const endpoint = endpoints[platform];
+    if (!endpoint) throw new Error(`Unknown platform: ${platform}`);
+
+    try {
+      const response = await fetch(`${API_BASE}${endpoint}`, {
+        method: 'POST',
+      });
+      if (!response.ok) {
+        return { available: false, message: `${platform} analytics not available` };
+      }
+      return { available: true, data: await response.json() };
+    } catch (err) {
+      return { available: false, message: err.message };
+    }
+  },
+
+  async getAllPlatformStatus() {
+    const platforms = ['youtube', 'tiktok', 'facebook', 'instagram'];
+    const status = {};
+
+    await Promise.all(
+      platforms.map(async (platform) => {
+        try {
+          const response = await fetch(`${API_BASE}/${platform}-api/status`);
+          status[platform] = response.ok ? await response.json() : { connected: false };
+        } catch {
+          status[platform] = { connected: false };
+        }
+      })
+    );
+
+    return status;
   },
 
   // Brand Products
@@ -399,6 +592,949 @@ const api = {
   async getIndustryPreset(industry) {
     const response = await fetch(`${API_BASE}/brand/presets/${industry}`);
     if (!response.ok) throw new Error('Failed to get industry preset');
+    return response.json();
+  },
+
+  // ============ Batch Variation Engine ============
+  async generateBatch(niche = 'general', topic = null) {
+    const response = await fetch(`${API_BASE}/batch/generate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ niche, ...(topic && { topic }) }),
+    });
+    if (!response.ok) throw new Error('Failed to generate batch');
+    return response.json();
+  },
+
+  async getBatchQueue() {
+    const response = await fetch(`${API_BASE}/batch/queue`, {
+      headers: getAuthHeaders(),
+    });
+    if (!response.ok) throw new Error('Failed to get batch queue');
+    return response.json();
+  },
+
+  async updateBatchSchedule(settings) {
+    const response = await fetch(`${API_BASE}/batch/schedule`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(settings),
+    });
+    if (!response.ok) throw new Error('Failed to update schedule');
+    return response.json();
+  },
+
+  async processNextBatch(autoPost = true, platform = 'youtube') {
+    const response = await fetch(`${API_BASE}/batch/process`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ autoPost, platform }),
+    });
+    if (!response.ok) throw new Error('Failed to process batch');
+    return response.json();
+  },
+
+  async clearBatchQueue() {
+    const response = await fetch(`${API_BASE}/batch/queue`, {
+      method: 'DELETE',
+    });
+    if (!response.ok) throw new Error('Failed to clear queue');
+    return response.json();
+  },
+
+  async getBatchAnalytics() {
+    const response = await fetch(`${API_BASE}/batch/analytics`);
+    if (!response.ok) throw new Error('Failed to get batch analytics');
+    return response.json();
+  },
+
+  // ============ Exploration Config ============
+  async getExplorationConfig() {
+    const response = await fetch(`${API_BASE}/exploration/config`);
+    if (!response.ok) throw new Error('Failed to get exploration config');
+    return response.json();
+  },
+
+  async getExplorationSummary() {
+    const response = await fetch(`${API_BASE}/exploration/summary`);
+    if (!response.ok) throw new Error('Failed to get exploration summary');
+    return response.json();
+  },
+
+  async getPlatformExplorationConfig(platform) {
+    const response = await fetch(`${API_BASE}/exploration/platform/${platform}`);
+    if (!response.ok) throw new Error('Failed to get platform config');
+    return response.json();
+  },
+
+  async updateExplorationSetting(path, value) {
+    const response = await fetch(`${API_BASE}/exploration/update`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path, value }),
+    });
+    if (!response.ok) throw new Error('Failed to update setting');
+    return response.json();
+  },
+
+  async setExplorationRate(rate) {
+    const response = await fetch(`${API_BASE}/exploration/rate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ rate }),
+    });
+    if (!response.ok) throw new Error('Failed to set exploration rate');
+    return response.json();
+  },
+
+  async setStupidHustleConfig({ enabled, maxPerDay }) {
+    const response = await fetch(`${API_BASE}/exploration/stupid-hustle`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ enabled, maxPerDay }),
+    });
+    if (!response.ok) throw new Error('Failed to update stupid hustle config');
+    return response.json();
+  },
+
+  async testExploration(platform) {
+    const response = await fetch(`${API_BASE}/exploration/test/${platform}`);
+    if (!response.ok) throw new Error('Failed to test exploration');
+    return response.json();
+  },
+
+  async autoAdjustExploration({ viralRate, avgViews, trend }) {
+    const response = await fetch(`${API_BASE}/exploration/auto-adjust`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ viralRate, avgViews, trend }),
+    });
+    if (!response.ok) throw new Error('Failed to auto-adjust');
+    return response.json();
+  },
+
+  async resetExplorationConfig() {
+    const response = await fetch(`${API_BASE}/exploration/reset`, {
+      method: 'POST',
+    });
+    if (!response.ok) throw new Error('Failed to reset config');
+    return response.json();
+  },
+
+  // ============ Product Video Generator ============
+  async uploadProductMedia(formData, onProgress) {
+    return new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+
+      xhr.upload.addEventListener('progress', (e) => {
+        if (e.lengthComputable && onProgress) {
+          const progress = Math.round((e.loaded / e.total) * 100);
+          onProgress(progress);
+        }
+      });
+
+      xhr.addEventListener('load', () => {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          try {
+            resolve(JSON.parse(xhr.responseText));
+          } catch (e) {
+            reject(new Error('Invalid response'));
+          }
+        } else {
+          try {
+            const error = JSON.parse(xhr.responseText);
+            reject(new Error(error.error || 'Upload failed'));
+          } catch (e) {
+            reject(new Error('Upload failed'));
+          }
+        }
+      });
+
+      xhr.addEventListener('error', () => reject(new Error('Network error')));
+      xhr.addEventListener('abort', () => reject(new Error('Upload cancelled')));
+
+      xhr.open('POST', `${API_BASE}/product/upload-media`);
+      xhr.send(formData);
+    });
+  },
+
+  async generateProductVideo(productData) {
+    const response = await fetch(`${API_BASE}/product/generate-video`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(productData),
+    });
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Failed to generate product video');
+    }
+    return response.json();
+  },
+
+  // ============ Training Video Generator ============
+  async getTrainingVideoTypes() {
+    const response = await fetch(`${API_BASE}/training/video/types`);
+    if (!response.ok) throw new Error('Failed to get training video types');
+    return response.json();
+  },
+
+  async getTrainingTemplateDetails(videoType) {
+    const response = await fetch(`${API_BASE}/training/video/template/${videoType}`);
+    if (!response.ok) throw new Error('Failed to get template details');
+    return response.json();
+  },
+
+  async uploadTrainingMedia(formData, onProgress) {
+    return new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+
+      xhr.upload.addEventListener('progress', (e) => {
+        if (e.lengthComputable && onProgress) {
+          const progress = Math.round((e.loaded / e.total) * 100);
+          onProgress(progress);
+        }
+      });
+
+      xhr.addEventListener('load', () => {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          try {
+            resolve(JSON.parse(xhr.responseText));
+          } catch (e) {
+            reject(new Error('Invalid response'));
+          }
+        } else {
+          try {
+            const error = JSON.parse(xhr.responseText);
+            reject(new Error(error.error || 'Upload failed'));
+          } catch (e) {
+            reject(new Error('Upload failed'));
+          }
+        }
+      });
+
+      xhr.addEventListener('error', () => reject(new Error('Network error')));
+      xhr.addEventListener('abort', () => reject(new Error('Upload cancelled')));
+
+      xhr.open('POST', `${API_BASE}/training/video/upload-media`);
+      xhr.send(formData);
+    });
+  },
+
+  async previewTrainingStoryboard(trainingData) {
+    const response = await fetch(`${API_BASE}/training/video/preview`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(trainingData),
+    });
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Failed to preview storyboard');
+    }
+    return response.json();
+  },
+
+  async generateTrainingVideo(trainingData) {
+    const response = await fetch(`${API_BASE}/training/video/generate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(trainingData),
+    });
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Failed to generate training video');
+    }
+    return response.json();
+  },
+
+  // ============ AI Avatar Presenter ============
+  async checkAvatarStatus() {
+    const response = await fetch(`${API_BASE}/avatar/status`);
+    if (!response.ok) throw new Error('Failed to check avatar status');
+    return response.json();
+  },
+
+  async getStockAvatars() {
+    const response = await fetch(`${API_BASE}/avatar/stock`);
+    if (!response.ok) throw new Error('Failed to get stock avatars');
+    return response.json();
+  },
+
+  async getAvatarModes() {
+    const response = await fetch(`${API_BASE}/avatar/modes`);
+    if (!response.ok) throw new Error('Failed to get avatar modes');
+    return response.json();
+  },
+
+  async previewAvatar(avatarId) {
+    const response = await fetch(`${API_BASE}/avatar/preview/${avatarId}`);
+    if (!response.ok) throw new Error('Failed to preview avatar');
+    return response.json();
+  },
+
+  async uploadCustomAvatar(formData, onProgress) {
+    return new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+
+      xhr.upload.addEventListener('progress', (e) => {
+        if (e.lengthComputable && onProgress) {
+          const progress = Math.round((e.loaded / e.total) * 100);
+          onProgress(progress);
+        }
+      });
+
+      xhr.addEventListener('load', () => {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          try {
+            resolve(JSON.parse(xhr.responseText));
+          } catch (e) {
+            reject(new Error('Invalid response'));
+          }
+        } else {
+          try {
+            const error = JSON.parse(xhr.responseText);
+            reject(new Error(error.error || 'Upload failed'));
+          } catch (e) {
+            reject(new Error('Upload failed'));
+          }
+        }
+      });
+
+      xhr.addEventListener('error', () => reject(new Error('Network error')));
+      xhr.addEventListener('abort', () => reject(new Error('Upload cancelled')));
+
+      xhr.open('POST', `${API_BASE}/avatar/upload`);
+      xhr.send(formData);
+    });
+  },
+
+  async generateAvatarVideo(options) {
+    const response = await fetch(`${API_BASE}/avatar/generate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(options),
+    });
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Failed to generate avatar video');
+    }
+    return response.json();
+  },
+
+  async generateImageToAvatar(options) {
+    const response = await fetch(`${API_BASE}/avatar/image-to-avatar`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(options),
+    });
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Failed to convert image to avatar');
+    }
+    return response.json();
+  },
+
+  // ============ Document to Video ============
+  async getSupportedDocuments() {
+    const response = await fetch(`${API_BASE}/training/document/supported`);
+    if (!response.ok) throw new Error('Failed to get supported documents');
+    return response.json();
+  },
+
+  async uploadDocument(formData, onProgress) {
+    return new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+
+      xhr.upload.addEventListener('progress', (e) => {
+        if (e.lengthComputable && onProgress) {
+          const progress = Math.round((e.loaded / e.total) * 100);
+          onProgress(progress);
+        }
+      });
+
+      xhr.addEventListener('load', () => {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          try {
+            resolve(JSON.parse(xhr.responseText));
+          } catch (e) {
+            reject(new Error('Invalid response'));
+          }
+        } else {
+          try {
+            const error = JSON.parse(xhr.responseText);
+            reject(new Error(error.error || 'Upload failed'));
+          } catch (e) {
+            reject(new Error('Upload failed'));
+          }
+        }
+      });
+
+      xhr.addEventListener('error', () => reject(new Error('Network error')));
+      xhr.addEventListener('abort', () => reject(new Error('Upload cancelled')));
+
+      xhr.open('POST', `${API_BASE}/training/document/upload`);
+      xhr.send(formData);
+    });
+  },
+
+  async analyzeDocument(documentPath, videoType) {
+    const response = await fetch(`${API_BASE}/training/document/analyze`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ documentPath, videoType }),
+    });
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Failed to analyze document');
+    }
+    return response.json();
+  },
+
+  async convertDocumentToVideo(options) {
+    const response = await fetch(`${API_BASE}/training/document/convert`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(options),
+    });
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Failed to convert document to video');
+    }
+    return response.json();
+  },
+
+  // ============ A/B Testing ============
+  async getABTestingSummary() {
+    const response = await fetch(`${API_BASE}/ab-testing/summary`);
+    if (!response.ok) throw new Error('Failed to get A/B testing summary');
+    return response.json();
+  },
+
+  async getABTestingExperiments(status = 'active', platform = null) {
+    let url = `${API_BASE}/ab-testing/experiments?status=${status}`;
+    if (platform) url += `&platform=${platform}`;
+    const response = await fetch(url);
+    if (!response.ok) throw new Error('Failed to get experiments');
+    return response.json();
+  },
+
+  async createABExperiment(config) {
+    const response = await fetch(`${API_BASE}/ab-testing/experiments`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(config),
+    });
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Failed to create experiment');
+    }
+    return response.json();
+  },
+
+  async createHookExperiment(platform, niche, hooks) {
+    const response = await fetch(`${API_BASE}/ab-testing/experiments/hook`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ platform, niche, hooks }),
+    });
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Failed to create hook experiment');
+    }
+    return response.json();
+  },
+
+  async createVisualExperiment(platform, themes) {
+    const response = await fetch(`${API_BASE}/ab-testing/experiments/visual`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ platform, themes }),
+    });
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Failed to create visual experiment');
+    }
+    return response.json();
+  },
+
+  async createDurationExperiment(platform, durations) {
+    const response = await fetch(`${API_BASE}/ab-testing/experiments/duration`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ platform, durations }),
+    });
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Failed to create duration experiment');
+    }
+    return response.json();
+  },
+
+  async getNextVariant(experimentId) {
+    const response = await fetch(`${API_BASE}/ab-testing/experiments/${experimentId}/next-variant`);
+    if (!response.ok) throw new Error('Failed to get next variant');
+    return response.json();
+  },
+
+  async assignToExperiment(experimentId, videoId, variantId) {
+    const response = await fetch(`${API_BASE}/ab-testing/experiments/${experimentId}/assign`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ videoId, variantId }),
+    });
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Failed to assign to experiment');
+    }
+    return response.json();
+  },
+
+  async recordABTestResults(experimentId, videoId, views, retention) {
+    const response = await fetch(`${API_BASE}/ab-testing/results`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ experimentId, videoId, views, retention }),
+    });
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Failed to record results');
+    }
+    return response.json();
+  },
+
+  async getABTestingWinners(type = null, platform = null) {
+    let url = `${API_BASE}/ab-testing/winners`;
+    const params = [];
+    if (type) params.push(`type=${type}`);
+    if (platform) params.push(`platform=${platform}`);
+    if (params.length) url += '?' + params.join('&');
+    const response = await fetch(url);
+    if (!response.ok) throw new Error('Failed to get winners');
+    return response.json();
+  },
+
+  async applyABTestingWinners() {
+    const response = await fetch(`${API_BASE}/ab-testing/apply-winners`, {
+      method: 'POST',
+    });
+    if (!response.ok) throw new Error('Failed to apply winners');
+    return response.json();
+  },
+
+  async getABTestingRecommendations(platform = 'youtube') {
+    const response = await fetch(`${API_BASE}/ab-testing/recommendations?platform=${platform}`);
+    if (!response.ok) throw new Error('Failed to get recommendations');
+    return response.json();
+  },
+
+  // ============ Cross-Platform Intelligence ============
+  async getCrossPlatformSummary() {
+    const response = await fetch(`${API_BASE}/analytics/cross-platform/summary`);
+    if (!response.ok) throw new Error('Failed to get cross-platform summary');
+    return response.json();
+  },
+
+  async getCrossPlatformRecommendations(niche) {
+    const response = await fetch(`${API_BASE}/analytics/cross-platform/recommendations/${niche}`);
+    if (!response.ok) throw new Error('Failed to get cross-platform recommendations');
+    return response.json();
+  },
+
+  async getBestPostingTimes(platform = null) {
+    let url = `${API_BASE}/analytics/cross-platform/best-times`;
+    if (platform) url += `?platform=${platform}`;
+    const response = await fetch(url);
+    if (!response.ok) throw new Error('Failed to get best posting times');
+    return response.json();
+  },
+
+  async getUniversalWinners() {
+    const response = await fetch(`${API_BASE}/analytics/cross-platform/universal-winners`);
+    if (!response.ok) throw new Error('Failed to get universal winners');
+    return response.json();
+  },
+
+  async recordCrossPlatformPerformance(videoData) {
+    const response = await fetch(`${API_BASE}/analytics/cross-platform/record`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(videoData)
+    });
+    if (!response.ok) throw new Error('Failed to record cross-platform performance');
+    return response.json();
+  },
+
+  async suggestPlatformForTopic(topic, niche = null) {
+    let url = `${API_BASE}/analytics/cross-platform/suggest-platform?topic=${encodeURIComponent(topic)}`;
+    if (niche) url += `&niche=${encodeURIComponent(niche)}`;
+    const response = await fetch(url);
+    if (!response.ok) throw new Error('Failed to get platform suggestion');
+    return response.json();
+  },
+
+  // ============ Retention Optimizer ============
+  async getRetentionSummary() {
+    const response = await fetch(`${API_BASE}/analytics/retention/summary`);
+    if (!response.ok) throw new Error('Failed to get retention summary');
+    return response.json();
+  },
+
+  async getOptimalDuration(platform) {
+    const response = await fetch(`${API_BASE}/analytics/retention/optimal-duration/${platform}`);
+    if (!response.ok) throw new Error('Failed to get optimal duration');
+    return response.json();
+  },
+
+  async getBestRetentionHooks(platform = null) {
+    let url = `${API_BASE}/analytics/retention/best-hooks`;
+    if (platform) url += `/${platform}`;
+    const response = await fetch(url);
+    if (!response.ok) throw new Error('Failed to get best hooks');
+    return response.json();
+  },
+
+  async getRetentionRecommendations(platform) {
+    const response = await fetch(`${API_BASE}/analytics/retention/recommendations/${platform}`);
+    if (!response.ok) throw new Error('Failed to get retention recommendations');
+    return response.json();
+  },
+
+  // ============ Monetization ============
+  async getPlans() {
+    const response = await fetch(`${API_BASE}/monetization/plans`);
+    if (!response.ok) throw new Error('Failed to get plans');
+    return response.json();
+  },
+
+  async getSubscription() {
+    const response = await fetch(`${API_BASE}/monetization/subscription`, {
+      headers: getAuthHeaders(),
+    });
+    if (!response.ok) throw new Error('Failed to get subscription');
+    return response.json();
+  },
+
+  async subscribe(planId, paymentMethodId = null) {
+    const response = await fetch(`${API_BASE}/monetization/subscribe`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...getAuthHeaders(),
+      },
+      body: JSON.stringify({ planId, paymentMethodId }),
+    });
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Subscription failed');
+    }
+    return response.json();
+  },
+
+  async cancelSubscription() {
+    const response = await fetch(`${API_BASE}/monetization/cancel`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+    });
+    if (!response.ok) throw new Error('Failed to cancel subscription');
+    return response.json();
+  },
+
+  async createCheckout(planId, successUrl = null, cancelUrl = null) {
+    const response = await fetch(`${API_BASE}/monetization/checkout`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...getAuthHeaders(),
+      },
+      body: JSON.stringify({ planId, successUrl, cancelUrl }),
+    });
+    if (!response.ok) throw new Error('Failed to create checkout session');
+    return response.json();
+  },
+
+  async openBillingPortal(returnUrl = null) {
+    const response = await fetch(`${API_BASE}/monetization/billing-portal`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...getAuthHeaders(),
+      },
+      body: JSON.stringify({ returnUrl }),
+    });
+    if (!response.ok) throw new Error('Failed to open billing portal');
+    return response.json();
+  },
+
+  async getUsage() {
+    const response = await fetch(`${API_BASE}/monetization/usage`, {
+      headers: getAuthHeaders(),
+    });
+    if (!response.ok) throw new Error('Failed to get usage');
+    return response.json();
+  },
+
+  async checkUsageLimits() {
+    const response = await fetch(`${API_BASE}/monetization/check-limits`, {
+      headers: getAuthHeaders(),
+    });
+    if (!response.ok) throw new Error('Failed to check limits');
+    return response.json();
+  },
+
+  async trackVideoGeneration(videoData = {}) {
+    const response = await fetch(`${API_BASE}/monetization/track-video`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...getAuthHeaders(),
+      },
+      body: JSON.stringify({ videoData }),
+    });
+    if (!response.ok) throw new Error('Failed to track video');
+    return response.json();
+  },
+
+  // Affiliate
+  async getAffiliate() {
+    const response = await fetch(`${API_BASE}/monetization/affiliate`, {
+      headers: getAuthHeaders(),
+    });
+    if (!response.ok) throw new Error('Failed to get affiliate');
+    return response.json();
+  },
+
+  async createAffiliate(paypalEmail) {
+    const response = await fetch(`${API_BASE}/monetization/affiliate`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...getAuthHeaders(),
+      },
+      body: JSON.stringify({ paypalEmail }),
+    });
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Failed to create affiliate');
+    }
+    return response.json();
+  },
+
+  async updateAffiliatePaypal(paypalEmail) {
+    const response = await fetch(`${API_BASE}/monetization/affiliate/paypal`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        ...getAuthHeaders(),
+      },
+      body: JSON.stringify({ paypalEmail }),
+    });
+    if (!response.ok) throw new Error('Failed to update PayPal email');
+    return response.json();
+  },
+
+  async trackAffiliateReferral(affiliateCode, userId, planId) {
+    const response = await fetch(`${API_BASE}/monetization/affiliate/track`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ affiliateCode, userId, planId }),
+    });
+    return response.json();
+  },
+
+  async requestPayout(amount) {
+    const response = await fetch(`${API_BASE}/monetization/affiliate/payout`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...getAuthHeaders(),
+      },
+      body: JSON.stringify({ amount }),
+    });
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Failed to request payout');
+    }
+    return response.json();
+  },
+
+  async getTransactions(limit = 50) {
+    const response = await fetch(`${API_BASE}/monetization/transactions?limit=${limit}`, {
+      headers: getAuthHeaders(),
+    });
+    if (!response.ok) throw new Error('Failed to get transactions');
+    return response.json();
+  },
+
+  // ============ Generic HTTP Methods ============
+  async get(endpoint) {
+    try {
+      const response = await fetch(`${API_BASE}${endpoint}`, {
+        headers: getAuthHeaders(),
+      });
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({}));
+        throw new Error(error.error || `GET ${endpoint} failed with status ${response.status}`);
+      }
+      const data = await response.json();
+      return data;
+    } catch (error) {
+      console.error(`API GET ${endpoint} error:`, error);
+      throw error;
+    }
+  },
+
+  async post(endpoint, data = {}) {
+    const response = await fetch(`${API_BASE}${endpoint}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...getAuthHeaders(),
+      },
+      body: JSON.stringify(data),
+    });
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({}));
+      throw new Error(error.error || `POST ${endpoint} failed`);
+    }
+    return response.json();
+  },
+
+  async put(endpoint, data = {}) {
+    const response = await fetch(`${API_BASE}${endpoint}`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        ...getAuthHeaders(),
+      },
+      body: JSON.stringify(data),
+    });
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({}));
+      throw new Error(error.error || `PUT ${endpoint} failed`);
+    }
+    return response.json();
+  },
+
+  async delete(endpoint) {
+    const response = await fetch(`${API_BASE}${endpoint}`, {
+      method: 'DELETE',
+      headers: getAuthHeaders(),
+    });
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({}));
+      throw new Error(error.error || `DELETE ${endpoint} failed`);
+    }
+    return response.json();
+  },
+
+  // ============ Job Queue Management ============
+  /**
+   * Create a background video generation job
+   * @param {Object} params - Job parameters
+   * @param {string} params.niche - Video niche
+   * @param {string} params.topic - Video topic (optional)
+   * @param {boolean} params.autoPost - Whether to auto-post after generation
+   * @returns {Promise<Object>} Job creation result with jobId
+   */
+  async createVideoJob({ niche, topic, autoPost }) {
+    const response = await fetch(`${API_BASE}/smart/create-job`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...getAuthHeaders(),
+      },
+      body: JSON.stringify({ niche, topic, autoPost }),
+    });
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({}));
+      throw new Error(error.error || 'Failed to create video job');
+    }
+    return response.json();
+  },
+
+  /**
+   * Get job status and progress
+   * @param {string} jobId - Job ID
+   * @returns {Promise<Object>} Job status with progress information
+   */
+  async getJob(jobId) {
+    const response = await fetch(`${API_BASE}/jobs/${jobId}`, {
+      headers: getAuthHeaders(),
+    });
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({}));
+      throw new Error(error.error || 'Failed to get job status');
+    }
+    return response.json();
+  },
+
+  /**
+   * List user's jobs
+   * @param {Object} options - Query options
+   * @param {string} options.status - Filter by status (queued, processing, completed, failed)
+   * @param {number} options.limit - Maximum number of jobs to return
+   * @param {number} options.offset - Offset for pagination
+   * @returns {Promise<Object>} List of jobs
+   */
+  async listJobs({ status, limit = 50, offset = 0 } = {}) {
+    const params = new URLSearchParams();
+    if (status) params.append('status', status);
+    params.append('limit', limit.toString());
+    params.append('offset', offset.toString());
+
+    const response = await fetch(`${API_BASE}/jobs?${params}`, {
+      headers: getAuthHeaders(),
+    });
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({}));
+      throw new Error(error.error || 'Failed to list jobs');
+    }
+    return response.json();
+  },
+
+  /**
+   * Cancel a job
+   * @param {string} jobId - Job ID to cancel
+   * @returns {Promise<Object>} Cancellation result
+   */
+  async cancelJob(jobId) {
+    const response = await fetch(`${API_BASE}/jobs/${jobId}/cancel`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+    });
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({}));
+      throw new Error(error.error || 'Failed to cancel job');
+    }
+    return response.json();
+  },
+
+  /**
+   * Get user's job statistics
+   * @returns {Promise<Object>} Job statistics
+   */
+  async getJobStats() {
+    const response = await fetch(`${API_BASE}/jobs/stats`, {
+      headers: getAuthHeaders(),
+    });
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({}));
+      throw new Error(error.error || 'Failed to get job stats');
+    }
+    return response.json();
+  },
+
+  /**
+   * Get global queue statistics
+   * @returns {Promise<Object>} Queue statistics
+   */
+  async getQueueStats() {
+    const response = await fetch(`${API_BASE}/jobs/queue/stats`, {
+      headers: getAuthHeaders(),
+    });
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({}));
+      throw new Error(error.error || 'Failed to get queue stats');
+    }
     return response.json();
   },
 };
