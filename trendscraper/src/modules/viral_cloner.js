@@ -2,6 +2,7 @@ import fetch from 'node-fetch';
 import fs from 'fs';
 import path from 'path';
 import { GoogleGenerativeAI } from '@google/generative-ai';
+import dataService from '../services/dataService.js';
 
 const CACHE_PATH = '/app/data/viral_cache.json';
 const CACHE_TTL = 1800000; // 30 minutes
@@ -227,25 +228,36 @@ const scrapeYouTubeTrending = async (niche) => {
 
 /**
  * Fetch viral Instagram Reels (via Facebook Graph API)
+ * @param {string} userId - User ID (required for multi-tenant)
+ * @param {object} options - Fetch options
  */
-export const fetchInstagramVirals = async (options = {}) => {
-    const { hashtag = '', limit = 20 } = options;
-
-    console.log('📸 Fetching viral Instagram Reels...');
-
-    // Check if we have Facebook tokens
-    const tokensPath = '/app/data/facebook_tokens.json';
-    if (!fs.existsSync(tokensPath)) {
+export const fetchInstagramVirals = async (userId, options = {}) => {
+    if (!userId) {
         return {
             success: false,
             virals: [],
-            error: 'Facebook/Instagram not authorized. Run /facebook-api/auth first.'
+            error: 'userId is required to fetch Instagram virals'
         };
     }
 
+    const { hashtag = '', limit = 20 } = options;
+
+    console.log(`📸 [User: ${userId}] Fetching viral Instagram Reels...`);
+
     try {
-        const tokens = JSON.parse(fs.readFileSync(tokensPath, 'utf8'));
-        const accessToken = tokens.pageAccessToken || tokens.accessToken;
+        // Load tokens from database
+        const tokenData = await dataService.tokens.getToken(userId, 'instagram') ||
+                          await dataService.tokens.getToken(userId, 'facebook');
+
+        if (!tokenData) {
+            return {
+                success: false,
+                virals: [],
+                error: 'Facebook/Instagram not authorized. Connect via /facebook-api/auth first.'
+            };
+        }
+
+        const accessToken = tokenData.metadata?.pageAccessToken || tokenData.accessToken;
 
         if (!accessToken) {
             return { success: false, virals: [], error: 'No access token found' };
@@ -253,13 +265,13 @@ export const fetchInstagramVirals = async (options = {}) => {
 
         // Search hashtag media (requires Instagram Graph API)
         // Note: This requires additional permissions
-        const igAccountId = tokens.instagramAccountId;
+        const igAccountId = tokenData.metadata?.instagramAccountId;
 
         if (!igAccountId) {
             return {
                 success: false,
                 virals: [],
-                error: 'Instagram account not linked. Connect via /instagram-api/connect'
+                error: 'Instagram account not linked. Connect via /instagram-api/account-id first.'
             };
         }
 
@@ -316,21 +328,32 @@ export const fetchInstagramVirals = async (options = {}) => {
 
 /**
  * Fetch viral Facebook Reels
+ * @param {string} userId - User ID (required for multi-tenant)
+ * @param {object} options - Fetch options
  */
-export const fetchFacebookVirals = async (options = {}) => {
-    const { limit = 20 } = options;
-
-    console.log('👥 Fetching viral Facebook Reels...');
-
-    const tokensPath = '/app/data/facebook_tokens.json';
-    if (!fs.existsSync(tokensPath)) {
-        return { success: false, virals: [], error: 'Facebook not authorized' };
+export const fetchFacebookVirals = async (userId, options = {}) => {
+    if (!userId) {
+        return {
+            success: false,
+            virals: [],
+            error: 'userId is required to fetch Facebook virals'
+        };
     }
 
+    const { limit = 20 } = options;
+
+    console.log(`👥 [User: ${userId}] Fetching viral Facebook Reels...`);
+
     try {
-        const tokens = JSON.parse(fs.readFileSync(tokensPath, 'utf8'));
-        const accessToken = tokens.pageAccessToken || tokens.accessToken;
-        const pageId = tokens.pageId;
+        // Load tokens from database
+        const tokenData = await dataService.tokens.getToken(userId, 'facebook');
+
+        if (!tokenData) {
+            return { success: false, virals: [], error: 'Facebook not authorized. Connect via /facebook-api/auth first.' };
+        }
+
+        const accessToken = tokenData.metadata?.pageAccessToken || tokenData.accessToken;
+        const pageId = tokenData.metadata?.pageId;
 
         if (!accessToken || !pageId) {
             return { success: false, virals: [], error: 'Missing Facebook credentials' };
@@ -484,8 +507,10 @@ export const batchCloneVirals = async (virals, options = {}) => {
 
 /**
  * Fetch virals from all platforms and generate unique content ideas
+ * @param {string} userId - User ID (required for authenticated platforms)
+ * @param {object} options - Discovery options
  */
-export const discoverAndClone = async (options = {}) => {
+export const discoverAndClone = async (userId, options = {}) => {
     const {
         niche = 'general',
         platforms = ['tiktok', 'youtube'],
@@ -493,7 +518,7 @@ export const discoverAndClone = async (options = {}) => {
         cloneTop = 5
     } = options;
 
-    console.log('🚀 Starting viral discovery and cloning...');
+    console.log(`🚀 [User: ${userId}] Starting viral discovery and cloning...`);
     console.log(`   Niche: ${niche}`);
     console.log(`   Platforms: ${platforms.join(', ')}`);
 
@@ -511,12 +536,12 @@ export const discoverAndClone = async (options = {}) => {
     }
 
     if (platforms.includes('instagram')) {
-        const instagram = await fetchInstagramVirals({ limit });
+        const instagram = await fetchInstagramVirals(userId, { limit });
         if (instagram.success) allVirals.push(...instagram.virals);
     }
 
     if (platforms.includes('facebook')) {
-        const facebook = await fetchFacebookVirals({ limit });
+        const facebook = await fetchFacebookVirals(userId, { limit });
         if (facebook.success) allVirals.push(...facebook.virals);
     }
 

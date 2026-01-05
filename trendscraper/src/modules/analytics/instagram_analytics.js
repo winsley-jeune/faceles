@@ -16,12 +16,7 @@
  * Strategy: 70% follower-friendly content, 30% reach-optimized content
  */
 
-import fs from 'fs';
-import path from 'path';
-import { fileURLToPath } from 'url';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+import dataService from '../../services/dataService.js';
 
 // Instagram-specific thresholds
 const INSTAGRAM_THRESHOLDS = {
@@ -40,57 +35,62 @@ const INSTAGRAM_THRESHOLDS = {
     CONVERSION_TARGET: 0.1         // 10% of non-followers should follow
 };
 
-// Pattern storage path
-const PATTERNS_FILE = path.join(__dirname, '../../data/instagram_winning_patterns.json');
+/**
+ * Get default patterns structure
+ */
+const getDefaultPatterns = () => ({
+    winners: [],           // Top performing videos
+    patterns: {
+        hooks: {},         // Hook style performance
+        niches: {},        // Niche performance
+        hashtags: {},      // Hashtag performance
+        aesthetics: {},    // Visual style performance
+        musicTypes: {},    // Music/audio type performance
+        postTimes: {},     // Best times to post
+        durations: {},     // Video length performance
+        captionStyles: {}  // Caption style performance
+    },
+    equilibrium: {
+        followerContentCount: 0,   // Content aimed at followers
+        reachContentCount: 0,      // Content aimed at new viewers
+        avgFollowerEngagement: 0,
+        avgReachEngagement: 0,
+        currentRatio: 0.5,         // Current follower/reach content ratio
+        optimalRatio: 0.7          // Target ratio (adjusts over time)
+    },
+    lastUpdated: null
+});
 
 /**
- * Load or initialize winning patterns
+ * Load or initialize winning patterns for user
  */
-export const loadWinningPatterns = () => {
+export const loadWinningPatterns = async (userId) => {
     try {
-        if (fs.existsSync(PATTERNS_FILE)) {
-            return JSON.parse(fs.readFileSync(PATTERNS_FILE, 'utf8'));
-        }
+        const patterns = await dataService.patterns.getWinningPatterns(userId, 'instagram');
+        return patterns || getDefaultPatterns();
     } catch (err) {
-        console.error('Error loading IG patterns:', err);
+        console.error('Error loading Instagram patterns:', err);
+        return getDefaultPatterns();
     }
-
-    return {
-        winners: [],           // Top performing videos
-        patterns: {
-            hooks: {},         // Hook style performance
-            niches: {},        // Niche performance
-            hashtags: {},      // Hashtag performance
-            aesthetics: {},    // Visual style performance
-            musicTypes: {},    // Music/audio type performance
-            postTimes: {},     // Best times to post
-            durations: {},     // Video length performance
-            captionStyles: {}  // Caption style performance
-        },
-        equilibrium: {
-            followerContentCount: 0,   // Content aimed at followers
-            reachContentCount: 0,      // Content aimed at new viewers
-            avgFollowerEngagement: 0,
-            avgReachEngagement: 0,
-            currentRatio: 0.5,         // Current follower/reach content ratio
-            optimalRatio: 0.7          // Target ratio (adjusts over time)
-        },
-        lastUpdated: null
-    };
 };
 
 /**
- * Save patterns to file
+ * Initialize patterns (no-op for database version)
  */
-const savePatterns = (patterns) => {
+export const initializePatterns = (patterns = null) => {
+    console.log('   📊 Instagram patterns initialization (using database)');
+    return patterns || getDefaultPatterns();
+};
+
+/**
+ * Save patterns for user
+ */
+const savePatterns = async (userId, patterns) => {
     try {
-        const dir = path.dirname(PATTERNS_FILE);
-        if (!fs.existsSync(dir)) {
-            fs.mkdirSync(dir, { recursive: true });
-        }
-        fs.writeFileSync(PATTERNS_FILE, JSON.stringify(patterns, null, 2));
+        patterns.lastUpdated = new Date().toISOString();
+        await dataService.patterns.saveWinningPatterns(userId, 'instagram', patterns);
     } catch (err) {
-        console.error('Error saving IG patterns:', err);
+        console.error('Error saving Instagram patterns:', err);
     }
 };
 
@@ -324,8 +324,8 @@ export const calculateOptimalRatio = (patterns) => {
 /**
  * Update winning patterns with new video data
  */
-export const updateWinningPatterns = (video, scoreResult) => {
-    const patterns = loadWinningPatterns();
+export const updateWinningPatterns = async (userId, video, scoreResult) => {
+    const patterns = await loadWinningPatterns(userId);
     const extracted = extractPatterns(video);
 
     // Update equilibrium tracking
@@ -401,7 +401,7 @@ export const updateWinningPatterns = (video, scoreResult) => {
     }
 
     patterns.lastUpdated = new Date().toISOString();
-    savePatterns(patterns);
+    await savePatterns(userId, patterns);
 
     return patterns;
 };
@@ -410,8 +410,8 @@ export const updateWinningPatterns = (video, scoreResult) => {
  * Generate few-shot prompt for Instagram content
  * Emphasizes the Nash Equilibrium balance
  */
-export const generateFewShotPrompt = () => {
-    const patterns = loadWinningPatterns();
+export const generateFewShotPrompt = async (userId) => {
+    const patterns = await loadWinningPatterns(userId);
 
     let prompt = `## Instagram Content Strategy (Nash Equilibrium - Balance Follower & Reach)\n\n`;
 
@@ -638,7 +638,7 @@ export const analyzeAccount = async (accessToken) => {
 /**
  * Add video manually (for testing or when API unavailable)
  */
-export const addVideoManually = (videoData) => {
+export const addVideoManually = async (userId, videoData) => {
     const video = {
         id: videoData.id || `ig_manual_${Date.now()}`,
         caption: videoData.caption || videoData.title,
@@ -658,20 +658,21 @@ export const addVideoManually = (videoData) => {
     };
 
     const scoreResult = calculateNashEquilibriumScore(video);
-    updateWinningPatterns(video, scoreResult);
+    await updateWinningPatterns(userId, video, scoreResult);
 
+    const patterns = await loadWinningPatterns(userId);
     return {
         video,
         analysis: scoreResult,
-        equilibrium: loadWinningPatterns().equilibrium
+        equilibrium: patterns.equilibrium
     };
 };
 
 /**
  * Get content recommendation based on current equilibrium
  */
-export const getContentRecommendation = () => {
-    const patterns = loadWinningPatterns();
+export const getContentRecommendation = async (userId) => {
+    const patterns = await loadWinningPatterns(userId);
     const eq = patterns.equilibrium;
 
     if (eq.currentRatio < eq.optimalRatio - 0.1) {
@@ -709,5 +710,6 @@ export default {
     addVideoManually,
     getContentRecommendation,
     loadWinningPatterns,
+    initializePatterns,
     INSTAGRAM_THRESHOLDS
 };

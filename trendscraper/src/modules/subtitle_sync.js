@@ -159,19 +159,51 @@ export const createKaraokeSubtitles = (alignedSRT) => {
 export const generateEstimatedSubtitles = (storyboard, totalAudioDuration = null) => {
     console.log("   📝 Generating estimated subtitles...");
 
+    // INPUT VALIDATION
+    if (!storyboard || !Array.isArray(storyboard) || storyboard.length === 0) {
+        console.warn("   ⚠️ generateEstimatedSubtitles: Invalid or empty storyboard, returning empty SRT");
+        return "";
+    }
+
+    // Ensure all scenes have text property
+    const validStoryboard = storyboard.filter(s => s && s.text && typeof s.text === 'string');
+    if (validStoryboard.length === 0) {
+        console.warn("   ⚠️ generateEstimatedSubtitles: No valid scenes with text found");
+        return "";
+    }
+
     let srtContent = "";
     let currentTime = 0;
     let subtitleIndex = 1;
 
     // Calculate total script duration from storyboard
     const totalDuration = totalAudioDuration ||
-        storyboard.reduce((sum, s) => sum + (s.duration || 5), 0) * 1000;
+        validStoryboard.reduce((sum, s) => sum + (s.duration || 5), 0) * 1000;
+
+    // Guard against invalid duration
+    if (!isFinite(totalDuration) || totalDuration <= 0) {
+        console.warn("   ⚠️ generateEstimatedSubtitles: Invalid total duration, using default");
+        return "";
+    }
 
     // Estimate words per second (average speaking rate ~150 wpm = 2.5 wps)
-    const totalWords = storyboard.reduce((sum, s) => sum + s.text.split(' ').length, 0);
+    const totalWords = validStoryboard.reduce((sum, s) => sum + s.text.split(' ').length, 0);
+
+    // Guard against division by zero
+    if (totalWords === 0) {
+        console.warn("   ⚠️ generateEstimatedSubtitles: No words in storyboard");
+        return "";
+    }
+
     const msPerWord = totalDuration / totalWords;
 
-    for (const scene of storyboard) {
+    // Guard against invalid calculation
+    if (!isFinite(msPerWord) || msPerWord <= 0) {
+        console.warn("   ⚠️ generateEstimatedSubtitles: Invalid msPerWord calculation");
+        return "";
+    }
+
+    for (const scene of validStoryboard) {
         const words = scene.text.split(' ');
         let i = 0;
 

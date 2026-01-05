@@ -1,0 +1,22 @@
+{
+  "winners": [],
+  "patterns": {
+    "hooks": {},
+    "niches": {},
+    "hashtags": {},
+    "aesthetics": {},
+    "musicTypes": {},
+    "postTimes": {},
+    "durations": {},
+    "captionStyles": {}
+  },
+  "equilibrium": {
+    "followerContentCount": 0,
+    "reachContentCount": 0,
+    "avgFollowerEngagement": 0,
+    "avgReachEngagement": 0,
+    "currentRatio": 0.5,
+    "optimalRatio": 0.7
+  },
+  "lastUpdated": "2025-12-04T23:12:46.106Z"
+}

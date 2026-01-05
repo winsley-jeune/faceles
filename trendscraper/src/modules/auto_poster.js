@@ -29,7 +29,9 @@ const loadJSON = (filepath, defaultValue = []) => {
         if (fs.existsSync(filepath)) {
             return JSON.parse(fs.readFileSync(filepath, 'utf8'));
         }
-    } catch { }
+    } catch (e) {
+        console.warn(`[auto_poster] Failed to load JSON from ${filepath}: ${e.message}`);
+    }
     return defaultValue;
 };
 

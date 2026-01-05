@@ -1,7 +1,9 @@
 import { chromium } from 'playwright';
 import fs from 'fs';
 import path from 'path';
+import dataAccess from '../../utils/dataAccess.js';
 
+// Legacy path (fallback)
 const COOKIES_PATH = '/app/data/tiktok_cookies.json';
 
 /**
@@ -24,10 +26,14 @@ const launchBrowser = async (headless = true) => {
     });
 
     // Load saved cookies if exists
-    if (fs.existsSync(COOKIES_PATH)) {
-        const cookies = JSON.parse(fs.readFileSync(COOKIES_PATH, 'utf8'));
+    const cookies = dataAccess.readJsonFileSync('tiktok_cookies.json');
+    if (cookies) {
         await context.addCookies(cookies);
         console.log('   📦 Loaded saved TikTok session');
+    } else if (fs.existsSync(COOKIES_PATH)) {
+        const legacyCookies = JSON.parse(fs.readFileSync(COOKIES_PATH, 'utf8'));
+        await context.addCookies(legacyCookies);
+        console.log('   📦 Loaded saved TikTok session (legacy)');
     }
 
     return { browser, context };
@@ -38,9 +44,15 @@ const launchBrowser = async (headless = true) => {
  */
 const saveCookies = async (context) => {
     const cookies = await context.cookies();
-    const dir = path.dirname(COOKIES_PATH);
-    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-    fs.writeFileSync(COOKIES_PATH, JSON.stringify(cookies, null, 2));
+    try {
+        // Use dataAccess for unified data access
+        await dataAccess.writeJsonFile('tiktok_cookies.json', cookies);
+    } catch (err) {
+        // Fallback to legacy path
+        const dir = path.dirname(COOKIES_PATH);
+        if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+        fs.writeFileSync(COOKIES_PATH, JSON.stringify(cookies, null, 2));
+    }
     console.log('   💾 TikTok session saved');
 };
 
@@ -98,7 +110,7 @@ export const tiktokLogin = async () => {
  * Uses search-optimized caption (question/answer format for TikTok SEO)
  * Example: "How to calculate compound interest correctly. Stop losing money. #moneytok"
  */
-export const uploadToTikTok = async (videoPath, { title, description, hashtags = [] }) => {
+export const uploadToTikTok = async (videoPath, { title, description, caption, hashtags = [] }) => {
     console.log('📤 Uploading to TikTok...');
 
     if (!fs.existsSync(videoPath)) {
@@ -140,7 +152,9 @@ export const uploadToTikTok = async (videoPath, { title, description, hashtags =
 
         // TikTok SEO: Use description as-is (already search-optimized with question format)
         // The description from social_content.js is formatted as: "How to [topic]. [Answer]. #hashtags"
-        const fullCaption = description.slice(0, 2200);
+        // Support caption, description, or title parameter
+        const captionText = caption || description || title || '';
+        const fullCaption = captionText.slice(0, 2200);
         console.log(`   🔍 TikTok SEO Caption: ${fullCaption.substring(0, 50)}...`);
 
         // Find caption/description input

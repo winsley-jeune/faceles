@@ -26,7 +26,7 @@ const VIRAL_CRITERIA = {
     },
     controversial: {
         name: "Controversial/Debate",
-        description: "Polarizing opinions, unpopular truths, challenges common beliefs",
+        description: "Polarizing opinions, challenges common beliefs",
         keywords: ["unpopular opinion", "nobody talks about", "truth about", "myth", "actually wrong"],
         engagement: "comments and debates",
         examples: [
@@ -89,6 +89,24 @@ const VIRAL_CRITERIA = {
             "Scientists just discovered why we dream",
             "The AI tool that's replacing Google search"
         ]
+    },
+    stupid_hustle: {
+        name: "Stupid Hustle (Engagement Bait)",
+        description: "Satirical, absurd, morally questionable 'sigma grindset' hustle ideas. Create-the-problem-sell-the-solution schemes designed to spark outrage and debate in comments.",
+        keywords: ["hustle", "passive income", "genius", "evil", "scheme", "side hustle", "sigma", "grindset", "controversial", "illegal"],
+        engagement: "maximum comments and debates - people will fight in comments",
+        examples: [
+            "Buy bread, spread in parking lot, birds poop on cars, offer car wash",
+            "Release mosquitoes near your bug spray stand",
+            "Puncture bike tires near your bike repair shop",
+            "Buy all umbrellas before rain, sell outside for $20",
+            "Put 'out of order' signs on vending machines except yours",
+            "Hide shopping carts, rent them out for $5",
+            "Disconnect cafe WiFi, sell mobile hotspot access",
+            "Start haunted rumor, offer ghost removal services",
+            "Deflate bouncy castle at party, offer pump rental",
+            "Put fake parking tickets on cars, sell ticket removal service"
+        ]
     }
 };
 
@@ -121,6 +139,18 @@ const NICHE_TOPICS = {
     productivity: {
         themes: ["time management", "focus hacks", "morning routines", "deep work", "automation", "systems thinking"],
         hooks: ["The 2-minute rule that changed my life", "Why busy people get nothing done", "How to 10x your output without working more"]
+    },
+    stupid_hustle: {
+        themes: ["create the problem sell the solution", "chaotic entrepreneurship", "morally gray business", "absurd side hustles", "evil genius schemes", "sigma grindset parody", "controversial money making"],
+        hooks: [
+            "Step 1: Create the problem. Step 2: Sell the solution",
+            "This hustle is so wrong it might be genius",
+            "The side hustle they don't want you to know about",
+            "Is this illegal? Asking for a friend",
+            "Morally questionable but financially sound",
+            "The hustle that made my neighbor call the cops",
+            "POV: You're about to ruin someone's day for profit"
+        ]
     }
 };
 

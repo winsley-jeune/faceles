@@ -1,8 +1,4 @@
-import fs from 'fs';
-import path from 'path';
-
-const TOKENS_PATH = '/app/data/tiktok_tokens.json';
-const WINNERS_PATH = '/app/data/tiktok_winning_patterns.json';
+import dataService from '../../services/dataService.js';
 
 /**
  * TikTok Analytics - EXPECTED VALUE Strategy
@@ -34,47 +30,69 @@ const TIKTOK_THRESHOLDS = {
 };
 
 /**
- * Load TikTok tokens
+ * Load TikTok tokens for user
  */
-const loadTokens = () => {
-    if (fs.existsSync(TOKENS_PATH)) {
-        return JSON.parse(fs.readFileSync(TOKENS_PATH, 'utf8'));
+const loadTokens = async (userId) => {
+    try {
+        const tokens = await dataService.auth.getPlatformTokens(userId, 'tiktok');
+        return tokens;
+    } catch (err) {
+        console.error('Failed to load TikTok tokens:', err.message);
+        return null;
     }
-    return null;
 };
 
 /**
- * Load winning patterns data
+ * Load winning patterns data for user
  */
-export const loadWinningPatterns = () => {
-    if (fs.existsSync(WINNERS_PATH)) {
-        return JSON.parse(fs.readFileSync(WINNERS_PATH, 'utf8'));
+export const loadWinningPatterns = async (userId) => {
+    try {
+        const patterns = await dataService.patterns.getWinningPatterns(userId, 'tiktok');
+        return patterns || {
+            platform: 'tiktok',
+            strategy: 'expected-value',
+            winners: [],
+            patterns: {
+                hooks: {},
+                niches: {},
+                sounds: {},
+                hashtags: {},
+                durations: {},
+                postingTimes: {}
+            },
+            viralRate: 0,
+            lastUpdated: null
+        };
+    } catch (err) {
+        console.error('Failed to load TikTok winning patterns:', err.message);
+        return {
+            platform: 'tiktok',
+            strategy: 'expected-value',
+            winners: [],
+            patterns: {
+                hooks: {},
+                niches: {},
+                sounds: {},
+                hashtags: {},
+                durations: {},
+                postingTimes: {}
+            },
+            viralRate: 0,
+            lastUpdated: null
+        };
     }
-    return {
-        platform: 'tiktok',
-        strategy: 'expected-value',
-        winners: [],
-        patterns: {
-            hooks: {},
-            niches: {},
-            sounds: {},
-            hashtags: {},
-            durations: {},
-            postingTimes: {}
-        },
-        viralRate: 0,  // % of videos that go viral
-        lastUpdated: null
-    };
 };
 
 /**
- * Save winning patterns data
+ * Save winning patterns data for user
  */
-const saveWinningPatterns = (data) => {
-    data.lastUpdated = new Date().toISOString();
-    const dir = path.dirname(WINNERS_PATH);
-    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-    fs.writeFileSync(WINNERS_PATH, JSON.stringify(data, null, 2));
+const saveWinningPatterns = async (userId, data) => {
+    try {
+        data.lastUpdated = new Date().toISOString();
+        await dataService.patterns.saveWinningPatterns(userId, 'tiktok', data);
+    } catch (err) {
+        console.error('Failed to save TikTok winning patterns:', err.message);
+    }
 };
 
 /**
@@ -177,8 +195,8 @@ export const calculateExpectedValueScore = (video) => {
 /**
  * Update winning patterns from TikTok video data
  */
-export const updateWinningPatterns = (videos, productionData = {}) => {
-    const data = loadWinningPatterns();
+export const updateWinningPatterns = async (userId, videos, productionData = {}) => {
+    const data = await loadWinningPatterns(userId);
     let newWinners = 0;
     let totalVideos = videos.length;
     let viralCount = 0;
@@ -258,7 +276,7 @@ export const updateWinningPatterns = (videos, productionData = {}) => {
     data.winners.sort((a, b) => b.score - a.score);
     data.winners = data.winners.slice(0, 20);
 
-    saveWinningPatterns(data);
+    await saveWinningPatterns(userId, data);
 
     if (newWinners > 0) {
         console.log(`   📊 TikTok: ${newWinners} new winner(s), viral rate: ${data.viralRate}%`);
@@ -270,16 +288,16 @@ export const updateWinningPatterns = (videos, productionData = {}) => {
 /**
  * Get top TikTok winners
  */
-export const getTopWinners = (count = 3) => {
-    const data = loadWinningPatterns();
+export const getTopWinners = async (userId, count = 3) => {
+    const data = await loadWinningPatterns(userId);
     return data.winners.slice(0, count);
 };
 
 /**
  * Get best performing patterns
  */
-export const getBestPatterns = () => {
-    const data = loadWinningPatterns();
+export const getBestPatterns = async (userId) => {
+    const data = await loadWinningPatterns(userId);
 
     const getBestInCategory = (category) => {
         const items = Object.entries(data.patterns[category] || {});
@@ -307,9 +325,9 @@ export const getBestPatterns = () => {
 /**
  * Generate few-shot prompt from TikTok winners
  */
-export const generateFewShotPrompt = () => {
-    const winners = getTopWinners(3);
-    const bestPatterns = getBestPatterns();
+export const generateFewShotPrompt = async (userId) => {
+    const winners = await getTopWinners(userId, 3);
+    const bestPatterns = await getBestPatterns(userId);
 
     if (winners.length === 0) {
         return '';
@@ -353,8 +371,8 @@ FOR TIKTOK: First 1 second is CRITICAL. Use pattern interrupts. Optimize for sha
  * Fetch TikTok video stats (requires TikTok API tokens)
  * Note: TikTok API access is limited, may need manual data entry
  */
-export const fetchVideoStats = async () => {
-    const tokens = loadTokens();
+export const fetchVideoStats = async (userId) => {
+    const tokens = await loadTokens(userId);
 
     if (!tokens || !tokens.access_token) {
         console.log('   ⚠️ TikTok API not connected. Add videos manually or connect API.');
@@ -413,8 +431,8 @@ export const fetchVideoStats = async () => {
 /**
  * Manually add TikTok video data (when API not available)
  */
-export const addVideoManually = (videoData) => {
-    const data = loadWinningPatterns();
+export const addVideoManually = async (userId, videoData) => {
+    const data = await loadWinningPatterns(userId);
     const scoreData = calculateExpectedValueScore(videoData);
     const patterns = extractPatterns(videoData);
 
@@ -441,7 +459,7 @@ export const addVideoManually = (videoData) => {
         data.winners = data.winners.slice(0, 20);
     }
 
-    saveWinningPatterns(data);
+    await saveWinningPatterns(userId, data);
     console.log(`   ✅ TikTok video added manually: ${videoData.views} views`);
 
     return data;

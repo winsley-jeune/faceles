@@ -4,7 +4,9 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage"
   },
   "keywords": [],
   "author": "",
@@ -14,14 +16,22 @@
     "cors": "^2.8.5",
     "csvtojson": "^2.0.10",
     "dotenv": "^17.2.3",
+    "edge-tts": "^1.0.1",
     "express": "^5.1.0",
+    "express-rate-limit": "^7.5.0",
     "googleapis": "^144.0.0",
+    "jsonwebtoken": "^9.0.3",
+    "multer": "^1.4.5-lts.1",
     "node-fetch": "^3.3.2",
     "node-schedule": "^2.1.1",
+    "pg": "^8.16.3",
     "playwright": "^1.40.0",
     "puppeteer": "^24.8.2",
     "replicate": "^1.4.0",
     "uuid": "^11.1.0"
+  },
+  "devDependencies": {
+    "vitest": "^2.1.0"
   },
   "type": "module"
 }

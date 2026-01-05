@@ -1,5 +1,5 @@
 /**
- * Training Data Collection Module
+ * Training Data Collection Module - Database Edition
  *
  * PURPOSE: Collect comprehensive data for future ML model training
  *
@@ -8,24 +8,10 @@
  * - Production variables (script, voice, visuals, timing, music)
  * - Output labels (views, engagement, retention per platform)
  *
- * Data is stored in ML-ready formats:
- * - JSONL for easy streaming/loading
- * - CSV for traditional ML pipelines
- * - Embeddings-ready text fields for transformer models
+ * Data is stored in PostgreSQL with user isolation
  */
 
-import fs from 'fs';
-import path from 'path';
-import { fileURLToPath } from 'url';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
-// Training data storage paths
-const DATA_DIR = path.join(__dirname, '../../data/training');
-const JSONL_FILE = path.join(DATA_DIR, 'video_training_data.jsonl');
-const METADATA_FILE = path.join(DATA_DIR, 'dataset_metadata.json');
-const EMBEDDINGS_DIR = path.join(DATA_DIR, 'embeddings');
+import dataService from '../../services/dataService.js';
 
 /**
  * COMPREHENSIVE DATA SCHEMA
@@ -263,39 +249,6 @@ const TRAINING_SCHEMA = {
 };
 
 /**
- * Initialize training data directory and files
- */
-export const initTrainingData = () => {
-    // Create directories
-    if (!fs.existsSync(DATA_DIR)) {
-        fs.mkdirSync(DATA_DIR, { recursive: true });
-    }
-    if (!fs.existsSync(EMBEDDINGS_DIR)) {
-        fs.mkdirSync(EMBEDDINGS_DIR, { recursive: true });
-    }
-
-    // Initialize metadata file
-    if (!fs.existsSync(METADATA_FILE)) {
-        const metadata = {
-            schemaVersion: TRAINING_SCHEMA.version,
-            createdAt: new Date().toISOString(),
-            totalSamples: 0,
-            samplesWithPerformance: 0,
-            platforms: ['youtube', 'tiktok', 'facebook', 'instagram'],
-            lastUpdated: new Date().toISOString(),
-            statistics: {
-                avgViews: {},
-                avgEngagement: {},
-                topPerformers: [],
-            }
-        };
-        fs.writeFileSync(METADATA_FILE, JSON.stringify(metadata, null, 2));
-    }
-
-    return { dataDir: DATA_DIR, jsonlFile: JSONL_FILE };
-};
-
-/**
  * Generate unique ID for training sample
  */
 const generateId = () => {
@@ -303,16 +256,26 @@ const generateId = () => {
 };
 
 /**
+ * Initialize training data (legacy compatibility - now no-op)
+ * Database initialization is handled by database module
+ */
+export const initTrainingData = async (userId) => {
+    // Database is auto-initialized, this is for backwards compatibility
+    return { status: 'database_ready' };
+};
+
+/**
  * Create a new training sample when video is generated
  * Called during video creation to capture all production variables
+ *
+ * @param {string} userId - User ID (required for multi-tenant isolation)
+ * @param {object} data - Video production data
  */
-export const createTrainingSample = (data) => {
-    initTrainingData();
+export const createTrainingSample = async (userId, data) => {
+    const sampleId = generateId();
 
-    const sample = {
-        id: generateId(),
-        createdAt: new Date().toISOString(),
-
+    const sampleData = {
+        sampleId,
         // Input features
         input: {
             topic: data.topic || '',
@@ -379,13 +342,10 @@ export const createTrainingSample = (data) => {
         }
     };
 
-    // Append to JSONL file
-    fs.appendFileSync(JSONL_FILE, JSON.stringify(sample) + '\n');
+    // Save to database
+    const sample = await dataService.training.createSample(userId, sampleData);
 
-    // Update metadata
-    updateMetadata('add');
-
-    console.log(`📊 Training sample created: ${sample.id}`);
+    console.log(`📊 [User: ${userId}] Training sample created: ${sampleId}`);
 
     return sample;
 };
@@ -393,50 +353,211 @@ export const createTrainingSample = (data) => {
 /**
  * Update performance data for a training sample
  * Called when analytics data becomes available
+ *
+ * @param {string} userId - User ID (required)
+ * @param {string} sampleId - Sample ID
+ * @param {string} platform - Platform name
+ * @param {object} performanceData - Performance metrics
  */
-export const updatePerformance = (sampleId, platform, performanceData) => {
-    const samples = loadAllSamples();
-    let updated = false;
-
-    const updatedSamples = samples.map(sample => {
-        if (sample.id === sampleId) {
-            sample.performance[platform] = performanceData;
-            sample.performance.lastUpdated = new Date().toISOString();
-
-            // Recalculate cross-platform metrics if we have multiple platforms
-            const platforms = ['youtube', 'tiktok', 'facebook', 'instagram'];
-            const availablePerf = platforms.filter(p => sample.performance[p]);
-
-            if (availablePerf.length > 0) {
-                sample.performance.crossPlatform = {
-                    totalViews: availablePerf.reduce((sum, p) => sum + (sample.performance[p]?.views || 0), 0),
-                    totalEngagement: availablePerf.reduce((sum, p) => {
-                        const perf = sample.performance[p];
-                        return sum + (perf?.likes || 0) + (perf?.comments || 0) + (perf?.shares || 0);
-                    }, 0),
-                    bestPlatform: availablePerf.reduce((best, p) => {
-                        const current = sample.performance[p]?.score || -10;
-                        const bestScore = sample.performance[best]?.score || -10;
-                        return current > bestScore ? p : best;
-                    }, availablePerf[0]),
-                    universalScore: availablePerf.reduce((sum, p) => sum + (sample.performance[p]?.score || 0), 0) / availablePerf.length,
-                };
-            }
-
-            updated = true;
-        }
-        return sample;
-    });
+export const updatePerformance = async (userId, sampleId, platform, performanceData) => {
+    const updated = await dataService.training.updatePerformance(userId, sampleId, platform, performanceData);
 
     if (updated) {
-        // Rewrite JSONL file
-        fs.writeFileSync(JSONL_FILE, updatedSamples.map(s => JSON.stringify(s)).join('\n') + '\n');
-        updateMetadata('performance');
-        console.log(`📊 Performance updated for ${sampleId} on ${platform}`);
+        console.log(`📊 [User: ${userId}] Performance updated for ${sampleId} on ${platform}`);
     }
 
     return updated;
 };
+
+/**
+ * Load all training samples for user
+ *
+ * @param {string} userId - User ID (required)
+ * @param {object} options - Query options (limit, offset, orderBy, orderDir)
+ */
+export const loadAllSamples = async (userId, options = {}) => {
+    return dataService.training.getAllSamples(userId, options);
+};
+
+/**
+ * Export training data to CSV for ML pipelines
+ *
+ * @param {string} userId - User ID (required)
+ * @param {string} outputPath - Output file path (optional)
+ */
+export const exportToCSV = async (userId, outputPath = null) => {
+    const samples = await dataService.training.getAllSamples(userId);
+
+    if (samples.length === 0) {
+        console.log(`📊 [User: ${userId}] No training data to export`);
+        return null;
+    }
+
+    // Flatten the nested structure for CSV
+    const flattenedData = samples.map(s => ({
+        id: s.sampleId,
+        created_at: s.createdAt,
+
+        // Input features
+        topic: s.input?.topic,
+        niche: s.input?.niche,
+        day_of_week: s.input?.dayOfWeek,
+        hour_of_day: s.input?.hourOfDay,
+        content_goal: s.input?.contentGoal,
+
+        // Script features
+        word_count: s.script?.wordCount,
+        hook_style: s.script?.hookStyle,
+        hook_has_number: s.script?.hasNumber ? 1 : 0,
+        hook_has_question: s.script?.hasQuestion ? 1 : 0,
+        urgency_words: s.script?.urgencyWords,
+        total_duration: s.script?.totalDuration,
+        scene_count: s.script?.sceneCount,
+
+        // Audio features
+        voice_preset: s.audio?.voicePreset,
+        voice_gender: s.audio?.voiceGender,
+        has_bgm: s.audio?.hasBGM ? 1 : 0,
+
+        // Visual features
+        visual_theme: s.visuals?.theme,
+        hook_has_contrast: s.visuals?.hookHasContrast ? 1 : 0,
+        hook_has_face: s.visuals?.hookHasFace ? 1 : 0,
+
+        // Performance labels
+        yt_views: s.performance?.youtube?.views,
+        yt_score: s.performance?.youtube?.score,
+        yt_label: s.performance?.youtube?.label,
+
+        tt_views: s.performance?.tiktok?.views,
+        tt_score: s.performance?.tiktok?.score,
+        tt_label: s.performance?.tiktok?.label,
+
+        fb_views: s.performance?.facebook?.views,
+        fb_score: s.performance?.facebook?.score,
+
+        ig_views: s.performance?.instagram?.views,
+        ig_score: s.performance?.instagram?.score,
+
+        universal_score: s.performance?.crossPlatform?.universalScore,
+        total_views: s.performance?.crossPlatform?.totalViews,
+        best_platform: s.performance?.crossPlatform?.bestPlatform,
+    }));
+
+    // Generate CSV
+    const headers = Object.keys(flattenedData[0]);
+    const csvContent = [
+        headers.join(','),
+        ...flattenedData.map(row => headers.map(h => {
+            const val = row[h];
+            if (val === null || val === undefined) return '';
+            if (typeof val === 'string' && val.includes(',')) return `"${val}"`;
+            return val;
+        }).join(','))
+    ].join('\n');
+
+    console.log(`📊 [User: ${userId}] Exported ${flattenedData.length} samples to CSV`);
+
+    return csvContent;
+};
+
+/**
+ * Export text fields for embedding generation
+ * These can be fed to OpenAI/Cohere/etc for vector embeddings
+ *
+ * @param {string} userId - User ID (required)
+ */
+export const exportForEmbeddings = async (userId) => {
+    const samples = await dataService.training.getAllSamples(userId);
+
+    const embeddingData = samples.map(s => ({
+        id: s.sampleId,
+        // Combined text for embedding
+        text: `Topic: ${s.input?.topic || ''}. Hook: ${s.script?.hookText || ''}. Full script: ${s.script?.fullText || ''}`,
+        // Separate fields for different embedding strategies
+        topic: s.input?.topic,
+        hook: s.script?.hookText,
+        script: s.script?.fullText,
+        // Labels for supervised learning
+        labels: {
+            yt_score: s.performance?.youtube?.score,
+            tt_score: s.performance?.tiktok?.score,
+            fb_score: s.performance?.facebook?.score,
+            ig_score: s.performance?.instagram?.score,
+            universal_score: s.performance?.crossPlatform?.universalScore,
+        }
+    }));
+
+    console.log(`📊 [User: ${userId}] Exported ${embeddingData.length} samples for embeddings`);
+
+    return embeddingData;
+};
+
+/**
+ * Get statistics about collected training data
+ *
+ * @param {string} userId - User ID (required)
+ */
+export const getDatasetStats = async (userId) => {
+    const samples = await dataService.training.getAllSamples(userId);
+
+    const stats = {
+        totalSamples: samples.length,
+        samplesWithPerformance: samples.filter(s => s.performance?.crossPlatform).length,
+
+        byNiche: {},
+        byHookStyle: {},
+        byVoice: {},
+        byTheme: {},
+
+        performanceDistribution: {
+            viral: 0,
+            good: 0,
+            average: 0,
+            poor: 0,
+            flop: 0,
+        },
+
+        avgScores: {
+            youtube: 0,
+            tiktok: 0,
+            facebook: 0,
+            instagram: 0,
+        }
+    };
+
+    samples.forEach(s => {
+        // Count by niche
+        const niche = s.input?.niche || 'unknown';
+        stats.byNiche[niche] = (stats.byNiche[niche] || 0) + 1;
+
+        // Count by hook style
+        const hookStyle = s.script?.hookStyle || 'unknown';
+        stats.byHookStyle[hookStyle] = (stats.byHookStyle[hookStyle] || 0) + 1;
+
+        // Count by voice
+        const voice = s.audio?.voicePreset || 'unknown';
+        stats.byVoice[voice] = (stats.byVoice[voice] || 0) + 1;
+
+        // Count by theme
+        const theme = s.visuals?.theme || 'unknown';
+        stats.byTheme[theme] = (stats.byTheme[theme] || 0) + 1;
+
+        // Performance distribution
+        ['youtube', 'tiktok', 'facebook', 'instagram'].forEach(platform => {
+            const label = s.performance?.[platform]?.label?.toLowerCase();
+            if (label && stats.performanceDistribution[label] !== undefined) {
+                stats.performanceDistribution[label]++;
+            }
+        });
+    });
+
+    return stats;
+};
+
+// ============================================
+// HELPER FUNCTIONS (unchanged logic)
+// ============================================
 
 /**
  * Analyze script for training features
@@ -630,223 +751,6 @@ const getSeasonality = () => {
     if (month >= 5 && month <= 7) return 'summer';
     if (month >= 8 && month <= 10) return 'fall';
     return 'winter';
-};
-
-/**
- * Load all training samples
- */
-export const loadAllSamples = () => {
-    if (!fs.existsSync(JSONL_FILE)) return [];
-
-    const content = fs.readFileSync(JSONL_FILE, 'utf8');
-    return content.trim().split('\n').filter(line => line).map(line => JSON.parse(line));
-};
-
-/**
- * Update metadata file
- */
-const updateMetadata = (action) => {
-    const samples = loadAllSamples();
-    const metadata = JSON.parse(fs.readFileSync(METADATA_FILE, 'utf8'));
-
-    metadata.totalSamples = samples.length;
-    metadata.samplesWithPerformance = samples.filter(s =>
-        s.performance.youtube || s.performance.tiktok || s.performance.facebook || s.performance.instagram
-    ).length;
-    metadata.lastUpdated = new Date().toISOString();
-
-    // Calculate statistics
-    const platforms = ['youtube', 'tiktok', 'facebook', 'instagram'];
-    platforms.forEach(platform => {
-        const platformSamples = samples.filter(s => s.performance[platform]?.views);
-        if (platformSamples.length > 0) {
-            metadata.statistics.avgViews[platform] = Math.round(
-                platformSamples.reduce((sum, s) => sum + s.performance[platform].views, 0) / platformSamples.length
-            );
-        }
-    });
-
-    // Top performers
-    metadata.statistics.topPerformers = samples
-        .filter(s => s.performance.crossPlatform?.universalScore)
-        .sort((a, b) => b.performance.crossPlatform.universalScore - a.performance.crossPlatform.universalScore)
-        .slice(0, 10)
-        .map(s => ({ id: s.id, score: s.performance.crossPlatform.universalScore, topic: s.input.topic }));
-
-    fs.writeFileSync(METADATA_FILE, JSON.stringify(metadata, null, 2));
-};
-
-/**
- * Export training data to CSV for ML pipelines
- */
-export const exportToCSV = (outputPath = null) => {
-    const samples = loadAllSamples();
-    const filepath = outputPath || path.join(DATA_DIR, 'training_data.csv');
-
-    // Flatten the nested structure for CSV
-    const flattenedData = samples.map(s => ({
-        id: s.id,
-        created_at: s.createdAt,
-
-        // Input features
-        topic: s.input?.topic,
-        niche: s.input?.niche,
-        day_of_week: s.input?.dayOfWeek,
-        hour_of_day: s.input?.hourOfDay,
-        content_goal: s.input?.contentGoal,
-
-        // Script features
-        word_count: s.script?.wordCount,
-        hook_style: s.script?.hookStyle,
-        hook_has_number: s.script?.hasNumber ? 1 : 0,
-        hook_has_question: s.script?.hasQuestion ? 1 : 0,
-        urgency_words: s.script?.urgencyWords,
-        total_duration: s.script?.totalDuration,
-        scene_count: s.script?.sceneCount,
-
-        // Audio features
-        voice_preset: s.audio?.voicePreset,
-        voice_gender: s.audio?.voiceGender,
-        has_bgm: s.audio?.hasBGM ? 1 : 0,
-
-        // Visual features
-        visual_theme: s.visuals?.theme,
-        hook_has_contrast: s.visuals?.hookHasContrast ? 1 : 0,
-        hook_has_face: s.visuals?.hookHasFace ? 1 : 0,
-
-        // Performance labels
-        yt_views: s.performance?.youtube?.views,
-        yt_score: s.performance?.youtube?.score,
-        yt_label: s.performance?.youtube?.label,
-
-        tt_views: s.performance?.tiktok?.views,
-        tt_score: s.performance?.tiktok?.score,
-        tt_label: s.performance?.tiktok?.label,
-
-        fb_views: s.performance?.facebook?.views,
-        fb_score: s.performance?.facebook?.score,
-
-        ig_views: s.performance?.instagram?.views,
-        ig_score: s.performance?.instagram?.score,
-
-        universal_score: s.performance?.crossPlatform?.universalScore,
-        total_views: s.performance?.crossPlatform?.totalViews,
-        best_platform: s.performance?.crossPlatform?.bestPlatform,
-    }));
-
-    // Generate CSV
-    if (flattenedData.length === 0) {
-        console.log('No training data to export');
-        return null;
-    }
-
-    const headers = Object.keys(flattenedData[0]);
-    const csvContent = [
-        headers.join(','),
-        ...flattenedData.map(row => headers.map(h => {
-            const val = row[h];
-            if (val === null || val === undefined) return '';
-            if (typeof val === 'string' && val.includes(',')) return `"${val}"`;
-            return val;
-        }).join(','))
-    ].join('\n');
-
-    fs.writeFileSync(filepath, csvContent);
-    console.log(`📊 Exported ${flattenedData.length} samples to ${filepath}`);
-
-    return filepath;
-};
-
-/**
- * Export text fields for embedding generation
- * These can be fed to OpenAI/Cohere/etc for vector embeddings
- */
-export const exportForEmbeddings = (outputPath = null) => {
-    const samples = loadAllSamples();
-    const filepath = outputPath || path.join(EMBEDDINGS_DIR, 'texts_for_embedding.jsonl');
-
-    const embeddingData = samples.map(s => ({
-        id: s.id,
-        // Combined text for embedding
-        text: `Topic: ${s.input?.topic || ''}. Hook: ${s.script?.hookText || ''}. Full script: ${s.script?.fullText || ''}`,
-        // Separate fields for different embedding strategies
-        topic: s.input?.topic,
-        hook: s.script?.hookText,
-        script: s.script?.fullText,
-        // Labels for supervised learning
-        labels: {
-            yt_score: s.performance?.youtube?.score,
-            tt_score: s.performance?.tiktok?.score,
-            fb_score: s.performance?.facebook?.score,
-            ig_score: s.performance?.instagram?.score,
-            universal_score: s.performance?.crossPlatform?.universalScore,
-        }
-    }));
-
-    fs.writeFileSync(filepath, embeddingData.map(d => JSON.stringify(d)).join('\n'));
-    console.log(`📊 Exported ${embeddingData.length} samples for embeddings to ${filepath}`);
-
-    return filepath;
-};
-
-/**
- * Get statistics about collected training data
- */
-export const getDatasetStats = () => {
-    const samples = loadAllSamples();
-
-    const stats = {
-        totalSamples: samples.length,
-        samplesWithPerformance: samples.filter(s => s.performance?.crossPlatform).length,
-
-        byNiche: {},
-        byHookStyle: {},
-        byVoice: {},
-        byTheme: {},
-
-        performanceDistribution: {
-            viral: 0,
-            good: 0,
-            average: 0,
-            poor: 0,
-            flop: 0,
-        },
-
-        avgScores: {
-            youtube: 0,
-            tiktok: 0,
-            facebook: 0,
-            instagram: 0,
-        }
-    };
-
-    samples.forEach(s => {
-        // Count by niche
-        const niche = s.input?.niche || 'unknown';
-        stats.byNiche[niche] = (stats.byNiche[niche] || 0) + 1;
-
-        // Count by hook style
-        const hookStyle = s.script?.hookStyle || 'unknown';
-        stats.byHookStyle[hookStyle] = (stats.byHookStyle[hookStyle] || 0) + 1;
-
-        // Count by voice
-        const voice = s.audio?.voicePreset || 'unknown';
-        stats.byVoice[voice] = (stats.byVoice[voice] || 0) + 1;
-
-        // Count by theme
-        const theme = s.visuals?.theme || 'unknown';
-        stats.byTheme[theme] = (stats.byTheme[theme] || 0) + 1;
-
-        // Performance distribution
-        ['youtube', 'tiktok', 'facebook', 'instagram'].forEach(platform => {
-            const label = s.performance?.[platform]?.label?.toLowerCase();
-            if (label && stats.performanceDistribution[label] !== undefined) {
-                stats.performanceDistribution[label]++;
-            }
-        });
-    });
-
-    return stats;
 };
 
 export default {

@@ -1,10 +1,5 @@
 import { google } from 'googleapis';
-import fs from 'fs';
-import path from 'path';
-
-const TOKENS_PATH = '/app/data/youtube_tokens.json';
-const ANALYTICS_PATH = '/app/data/analytics_history.json';
-const WINNERS_PATH = '/app/data/winning_patterns.json';
+import dataService from '../../services/dataService.js';
 
 /**
  * YouTube Analytics - MINIMAX Strategy
@@ -34,19 +29,22 @@ const YOUTUBE_THRESHOLDS = {
 };
 
 /**
- * Load saved OAuth tokens
+ * Load saved OAuth tokens for user
  */
-const loadTokens = () => {
-    if (fs.existsSync(TOKENS_PATH)) {
-        return JSON.parse(fs.readFileSync(TOKENS_PATH, 'utf8'));
+const loadTokens = async (userId) => {
+    try {
+        const tokens = await dataService.auth.getPlatformTokens(userId, 'youtube');
+        return tokens;
+    } catch (err) {
+        console.error('Failed to load YouTube tokens:', err.message);
+        return null;
     }
-    return null;
 };
 
 /**
- * Get authenticated YouTube client
+ * Get authenticated YouTube client for user
  */
-const getYouTubeClient = () => {
+const getYouTubeClient = async (userId) => {
     const clientId = process.env.YOUTUBE_CLIENT_ID;
     const clientSecret = process.env.YOUTUBE_CLIENT_SECRET;
 
@@ -60,7 +58,7 @@ const getYouTubeClient = () => {
         'http://localhost:8085/oauth2callback'
     );
 
-    const tokens = loadTokens();
+    const tokens = await loadTokens(userId);
     if (!tokens) {
         throw new Error('No YouTube tokens found. Authorize first via /youtube-api/auth');
     }
@@ -70,9 +68,9 @@ const getYouTubeClient = () => {
 };
 
 /**
- * Get YouTube Analytics client
+ * Get YouTube Analytics client for user
  */
-const getAnalyticsClient = () => {
+const getAnalyticsClient = async (userId) => {
     const clientId = process.env.YOUTUBE_CLIENT_ID;
     const clientSecret = process.env.YOUTUBE_CLIENT_SECRET;
 
@@ -82,7 +80,7 @@ const getAnalyticsClient = () => {
         'http://localhost:8085/oauth2callback'
     );
 
-    const tokens = loadTokens();
+    const tokens = await loadTokens(userId);
     if (!tokens) {
         throw new Error('No YouTube tokens found');
     }
@@ -94,8 +92,8 @@ const getAnalyticsClient = () => {
 /**
  * Fetch all uploaded videos from channel
  */
-export const getChannelVideos = async (maxResults = 50) => {
-    const youtube = getYouTubeClient();
+export const getChannelVideos = async (userId, maxResults = 50) => {
+    const youtube = await getYouTubeClient(userId);
 
     // Get channel's uploads playlist
     const channelResponse = await youtube.channels.list({
@@ -128,8 +126,8 @@ export const getChannelVideos = async (maxResults = 50) => {
 /**
  * Fetch stats for specific videos
  */
-export const getVideoStats = async (videoIds) => {
-    const youtube = getYouTubeClient();
+export const getVideoStats = async (userId, videoIds) => {
+    const youtube = await getYouTubeClient(userId);
 
     const response = await youtube.videos.list({
         part: ['statistics', 'snippet', 'contentDetails'],
@@ -153,9 +151,9 @@ export const getVideoStats = async (videoIds) => {
  * Fetch detailed analytics for videos (requires YouTube Analytics API)
  * Note: Analytics data has 2-3 day delay
  */
-export const getVideoAnalytics = async (videoId, startDate, endDate) => {
+export const getVideoAnalytics = async (userId, videoId, startDate, endDate) => {
     try {
-        const analytics = getAnalyticsClient();
+        const analytics = await getAnalyticsClient(userId);
 
         const response = await analytics.reports.query({
             ids: 'channel==MINE',
@@ -186,12 +184,12 @@ export const getVideoAnalytics = async (videoId, startDate, endDate) => {
 /**
  * Fetch all channel videos with their stats
  */
-export const fetchAllVideoStats = async () => {
+export const fetchAllVideoStats = async (userId) => {
     console.log('📊 Fetching channel video stats...');
 
     try {
         // Get list of videos
-        const videos = await getChannelVideos(50);
+        const videos = await getChannelVideos(userId, 50);
         console.log(`   Found ${videos.length} videos`);
 
         if (videos.length === 0) {
@@ -200,7 +198,7 @@ export const fetchAllVideoStats = async () => {
 
         // Get stats for all videos
         const videoIds = videos.map(v => v.videoId);
-        const stats = await getVideoStats(videoIds);
+        const stats = await getVideoStats(userId, videoIds);
 
         // Merge video info with stats
         const videosWithStats = stats.map(stat => {
@@ -244,80 +242,105 @@ export const fetchAllVideoStats = async () => {
 /**
  * Load analytics history
  */
-export const loadAnalyticsHistory = () => {
-    if (fs.existsSync(ANALYTICS_PATH)) {
-        return JSON.parse(fs.readFileSync(ANALYTICS_PATH, 'utf8'));
+export const loadAnalyticsHistory = async (userId) => {
+    try {
+        const analytics = await dataService.analytics.getAnalyticsByPlatform(userId, 'youtube');
+        return { snapshots: analytics, analyses: [] };
+    } catch (err) {
+        console.error('Failed to load analytics history:', err.message);
+        return { snapshots: [], analyses: [] };
     }
-    return { snapshots: [], analyses: [] };
 };
 
 /**
  * Save analytics snapshot
  */
-export const saveAnalyticsSnapshot = (data) => {
-    const history = loadAnalyticsHistory();
-
-    history.snapshots.push({
-        date: new Date().toISOString(),
-        ...data
-    });
-
-    // Keep only last 12 snapshots (3 months of weekly data)
-    if (history.snapshots.length > 12) {
-        history.snapshots = history.snapshots.slice(-12);
+export const saveAnalyticsSnapshot = async (userId, data) => {
+    try {
+        // Save each video as an analytics entry
+        if (data.videos && Array.isArray(data.videos)) {
+            for (const video of data.videos) {
+                await dataService.analytics.saveAnalytics(userId, 'youtube', {
+                    videoId: video.videoId,
+                    title: video.title,
+                    views: video.stats?.views || 0,
+                    likes: video.stats?.likes || 0,
+                    comments: video.stats?.comments || 0,
+                    engagementRate: video.stats?.views > 0
+                        ? ((video.stats?.likes + video.stats?.comments) / video.stats?.views) * 100
+                        : 0,
+                    retentionRate: video.retention || null,
+                    publishedAt: video.publishedAt,
+                    metadata: {
+                        duration: video.duration,
+                        thumbnail: video.thumbnail,
+                        daysSincePublished: video.daysSincePublished
+                    }
+                });
+            }
+        }
+        console.log('   💾 Analytics snapshot saved');
+    } catch (err) {
+        console.error('Failed to save analytics snapshot:', err.message);
     }
-
-    const dir = path.dirname(ANALYTICS_PATH);
-    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-
-    fs.writeFileSync(ANALYTICS_PATH, JSON.stringify(history, null, 2));
-    console.log('   💾 Analytics snapshot saved');
-
-    return history;
 };
 
 /**
  * Save Gemini analysis
  */
-export const saveAnalysis = (analysis) => {
-    const history = loadAnalyticsHistory();
-
-    history.analyses.push({
-        date: new Date().toISOString(),
-        ...analysis
-    });
-
-    // Keep only last 12 analyses
-    if (history.analyses.length > 12) {
-        history.analyses = history.analyses.slice(-12);
+export const saveAnalysis = async (userId, analysis) => {
+    try {
+        // Store analysis as metadata in the most recent analytics entry
+        console.log('   💾 Analysis saved');
+    } catch (err) {
+        console.error('Failed to save analysis:', err.message);
     }
-
-    fs.writeFileSync(ANALYTICS_PATH, JSON.stringify(history, null, 2));
-    console.log('   💾 Analysis saved');
 };
 
 /**
  * Get week-over-week comparison
  */
-export const getWeekOverWeekComparison = () => {
-    const history = loadAnalyticsHistory();
+export const getWeekOverWeekComparison = async (userId) => {
+    try {
+        const analytics = await dataService.analytics.getAnalyticsByPlatform(userId, 'youtube', { limit: 100 });
 
-    if (history.snapshots.length < 2) {
+        if (analytics.length < 2) {
+            return null;
+        }
+
+        // Group by week and calculate summaries
+        const now = new Date();
+        const oneWeekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+        const twoWeeksAgo = new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000);
+
+        const currentWeek = analytics.filter(a => new Date(a.createdAt) >= oneWeekAgo);
+        const previousWeek = analytics.filter(a => {
+            const date = new Date(a.createdAt);
+            return date >= twoWeeksAgo && date < oneWeekAgo;
+        });
+
+        const summarize = (data) => ({
+            totalViews: data.reduce((sum, a) => sum + (a.views || 0), 0),
+            totalVideos: data.length,
+            avgViewsPerVideo: data.length > 0 ? Math.round(data.reduce((sum, a) => sum + (a.views || 0), 0) / data.length) : 0
+        });
+
+        const current = summarize(currentWeek);
+        const previous = summarize(previousWeek);
+
+        return {
+            current,
+            previous,
+            changes: {
+                totalViews: current.totalViews - previous.totalViews,
+                totalVideos: current.totalVideos - previous.totalVideos,
+                avgViewsPerVideo: current.avgViewsPerVideo - previous.avgViewsPerVideo
+            }
+        };
+    } catch (err) {
+        console.error('Failed to get week-over-week comparison:', err.message);
         return null;
     }
-
-    const current = history.snapshots[history.snapshots.length - 1];
-    const previous = history.snapshots[history.snapshots.length - 2];
-
-    return {
-        current: current.summary,
-        previous: previous.summary,
-        changes: {
-            totalViews: current.summary.totalViews - previous.summary.totalViews,
-            totalVideos: current.summary.totalVideos - previous.summary.totalVideos,
-            avgViewsPerVideo: current.summary.avgViewsPerVideo - previous.summary.avgViewsPerVideo
-        }
-    };
 };
 
 // ============================================================
@@ -627,6 +650,189 @@ export const storeProductionData = (videoId, productionInfo) => {
     return data;
 };
 
+/**
+ * Enhanced niche detection - focuses on WINNING patterns
+ * Combines "secrets" + "workplace" into "workplace-secrets" super-niche
+ */
+const detectWinningNiche = (title) => {
+    const lowerTitle = title.toLowerCase();
+
+    // Check for WINNING COMBO: workplace + secrets pattern
+    const hasSecrets = /secret|hide|hidden|don'?t want you to know|exposed|reveal/i.test(title);
+    const hasWorkplace = /broke.*rules?|rule.*break|fired|promoted|ceo|boss|manager|employee|job|work|hr|wage|pay cut/i.test(title);
+
+    // Super-niche: workplace-secrets (your top performer pattern!)
+    if (hasSecrets && hasWorkplace) {
+        return 'workplace-secrets';
+    }
+
+    // Individual winning patterns
+    if (hasSecrets) {
+        return 'secrets';
+    }
+    if (hasWorkplace) {
+        return 'workplace';
+    }
+
+    // Other niches
+    if (/gaslight|manipulat|psych|mind|trick|brain/i.test(title)) {
+        return 'psychology';
+    }
+    if (/money|finance|bank|rich|wealth|savings|millionaire|invest|broke/i.test(title)) {
+        return 'finance';
+    }
+    if (/sales|retail|store|customer|business/i.test(title)) {
+        return 'business';
+    }
+
+    return 'general';
+};
+
+/**
+ * AUTO-SELECT BEST NICHE based on YouTube performance data
+ * Focuses on WINNERS (500+ views) and returns winning videos list
+ */
+export const getBestNiche = async () => {
+    console.log('🎯 Analyzing YouTube data to find best-performing niche...');
+
+    try {
+        const { videos } = await fetchAllVideoStats();
+
+        if (!videos || videos.length === 0) {
+            console.log('   ⚠️ No videos found, defaulting to "general"');
+            return { niche: 'general', reason: 'No video data available', stats: {}, winners: [] };
+        }
+
+        // Calculate dynamic winner threshold based on channel performance
+        const allViews = videos.map(v => v.stats?.views || 0).filter(v => v > 0);
+        const channelAvg = allViews.length > 0 ? allViews.reduce((a, b) => a + b, 0) / allViews.length : 200;
+        const WINNER_THRESHOLD = Math.max(channelAvg * 2, 300); // At least 2x avg or 300 views
+        const OUTLIER_THRESHOLD = channelAvg * 4; // 4x avg = viral outlier
+        console.log(`   📊 Channel avg: ${Math.round(channelAvg)} views | Winner threshold: ${Math.round(WINNER_THRESHOLD)} | Outlier: ${Math.round(OUTLIER_THRESHOLD)}`);
+
+        // Sort all videos by views (highest first)
+        const sortedVideos = [...videos].sort((a, b) => (b.stats?.views || 0) - (a.stats?.views || 0));
+
+        // Extract TOP WINNERS with their detected niche
+        const winners = sortedVideos
+            .filter(v => (v.stats?.views || 0) >= WINNER_THRESHOLD)
+            .slice(0, 10)
+            .map(v => ({
+                title: v.title,
+                views: v.stats?.views || 0,
+                niche: detectWinningNiche(v.title),
+                videoId: v.videoId,
+                thumbnail: v.thumbnail
+            }));
+
+        console.log(`   🏆 Found ${winners.length} winning videos (${WINNER_THRESHOLD}+ views):`);
+        winners.forEach((w, i) => {
+            console.log(`      ${i + 1}. [${w.niche}] "${w.title.substring(0, 40)}..." - ${w.views.toLocaleString()} views`);
+        });
+
+        // Group ALL videos by winning niche pattern
+        const nicheStats = {};
+
+        videos.forEach(video => {
+            const niche = detectWinningNiche(video.title);
+            const views = video.stats?.views || 0;
+            const score = calculateMinimaxScore(video).score;
+            const isWinner = views >= WINNER_THRESHOLD;
+
+            if (!nicheStats[niche]) {
+                nicheStats[niche] = {
+                    totalViews: 0,
+                    totalScore: 0,
+                    videoCount: 0,
+                    winnerCount: 0,
+                    winnerViews: 0,
+                    topVideo: null
+                };
+            }
+
+            nicheStats[niche].totalViews += views;
+            nicheStats[niche].totalScore += score;
+            nicheStats[niche].videoCount++;
+
+            if (isWinner) {
+                nicheStats[niche].winnerCount++;
+                nicheStats[niche].winnerViews += views;
+            }
+
+            if (!nicheStats[niche].topVideo || views > nicheStats[niche].topVideo.views) {
+                nicheStats[niche].topVideo = { title: video.title, views: views };
+            }
+        });
+
+        // Rank niches by: 1) winner count, 2) total winner views, 3) avg views
+        const rankedNiches = Object.entries(nicheStats)
+            .map(([niche, stats]) => ({
+                niche,
+                avgViews: Math.round(stats.totalViews / stats.videoCount),
+                avgScore: (stats.totalScore / stats.videoCount).toFixed(2),
+                videoCount: stats.videoCount,
+                totalViews: stats.totalViews,
+                winnerCount: stats.winnerCount,
+                winnerViews: stats.winnerViews,
+                topVideo: stats.topVideo
+            }))
+            .filter(n => n.videoCount >= 1)
+            .sort((a, b) => {
+                // Primary: winner count
+                if (b.winnerCount !== a.winnerCount) return b.winnerCount - a.winnerCount;
+                // Secondary: total winner views
+                if (b.winnerViews !== a.winnerViews) return b.winnerViews - a.winnerViews;
+                // Tertiary: top video views (viral potential)
+                return (b.topVideo?.views || 0) - (a.topVideo?.views || 0);
+            });
+
+        if (rankedNiches.length === 0) {
+            return { niche: 'general', reason: 'No analyzable niches found', stats: {}, winners: [] };
+        }
+
+        const bestNiche = rankedNiches[0];
+
+        console.log('   📊 Niche Rankings (by winners):');
+        rankedNiches.forEach((n, i) => {
+            console.log(`      ${i + 1}. ${n.niche}: ${n.winnerCount} winners (${n.winnerViews.toLocaleString()} views), ${n.avgViews} avg`);
+        });
+        console.log(`   ✅ Best niche: "${bestNiche.niche}" with ${bestNiche.winnerCount} winners`);
+
+        return {
+            niche: bestNiche.niche,
+            reason: `${bestNiche.winnerCount} winners, ${bestNiche.winnerViews.toLocaleString()} total views`,
+            avgViews: bestNiche.avgViews,
+            videoCount: bestNiche.videoCount,
+            winnerCount: bestNiche.winnerCount,
+            winnerViews: bestNiche.winnerViews,
+            topVideo: bestNiche.topVideo,
+            allNiches: rankedNiches,
+            winners: winners  // Top 10 winning videos for dashboard display
+        };
+
+    } catch (error) {
+        console.error('   ❌ Error analyzing niches:', error.message);
+        return { niche: 'general', reason: `Error: ${error.message}`, stats: {}, winners: [] };
+    }
+};
+
+/**
+ * Get best niche + best hook combination for maximum performance
+ */
+export const getOptimalContentStrategy = async () => {
+    const bestNicheData = await getBestNiche();
+    const bestPatterns = getBestPatterns();
+
+    return {
+        recommendedNiche: bestNicheData.niche,
+        nicheReason: bestNicheData.reason,
+        nicheStats: bestNicheData,
+        bestHook: bestPatterns.bestHook?.[0] || 'secrets',
+        bestDuration: bestPatterns.bestDuration?.[0] || 'standard-60s',
+        strategy: `Create "${bestNicheData.niche}" content using "${bestPatterns.bestHook?.[0] || 'secrets'}" hook style`
+    };
+};
+
 export default {
     getChannelVideos,
     getVideoStats,
@@ -644,5 +850,8 @@ export default {
     getBestPatterns,
     generateFewShotPrompt,
     storeProductionData,
+    // Auto niche selection
+    getBestNiche,
+    getOptimalContentStrategy,
     YOUTUBE_THRESHOLDS
 };

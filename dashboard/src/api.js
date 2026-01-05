@@ -60,7 +60,10 @@ const api = {
   async createVideo({ topic, niche, autoPost }) {
     const response = await fetch(`${API_BASE}/create-full-video`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        ...getAuthHeaders(),
+      },
       body: JSON.stringify({ topic, niche, autoPost }),
     });
     if (!response.ok) throw new Error('Failed to create video');
@@ -121,13 +124,17 @@ const api = {
 
   // ============ YouTube ============
   async checkYouTubeStatus() {
-    const response = await fetch(`${API_BASE}/youtube-api/status`);
+    const response = await fetch(`${API_BASE}/youtube-api/status`, {
+      headers: getAuthHeaders(),
+    });
     if (!response.ok) throw new Error('Failed to check YouTube status');
     return response.json();
   },
 
   async getYouTubeAuthUrl() {
-    const response = await fetch(`${API_BASE}/youtube-api/auth`);
+    const response = await fetch(`${API_BASE}/youtube-api/auth`, {
+      headers: getAuthHeaders(),
+    });
     if (!response.ok) throw new Error('Failed to get YouTube auth URL');
     return response.json();
   },
@@ -144,13 +151,17 @@ const api = {
 
   // ============ TikTok ============
   async checkTikTokStatus() {
-    const response = await fetch(`${API_BASE}/tiktok-api/status`);
+    const response = await fetch(`${API_BASE}/tiktok-api/status`, {
+      headers: getAuthHeaders(),
+    });
     if (!response.ok) throw new Error('Failed to check TikTok status');
     return response.json();
   },
 
   async getTikTokAuthUrl() {
-    const response = await fetch(`${API_BASE}/tiktok-api/auth`);
+    const response = await fetch(`${API_BASE}/tiktok-api/auth`, {
+      headers: getAuthHeaders(),
+    });
     if (!response.ok) throw new Error('Failed to get TikTok auth URL');
     return response.json();
   },
@@ -167,13 +178,17 @@ const api = {
 
   // ============ Facebook ============
   async checkFacebookStatus() {
-    const response = await fetch(`${API_BASE}/facebook-api/status`);
+    const response = await fetch(`${API_BASE}/facebook-api/status`, {
+      headers: getAuthHeaders(),
+    });
     if (!response.ok) throw new Error('Failed to check Facebook status');
     return response.json();
   },
 
   async getFacebookAuthUrl() {
-    const response = await fetch(`${API_BASE}/facebook-api/auth`);
+    const response = await fetch(`${API_BASE}/facebook-api/auth`, {
+      headers: getAuthHeaders(),
+    });
     if (!response.ok) throw new Error('Failed to get Facebook auth URL');
     return response.json();
   },
@@ -190,14 +205,18 @@ const api = {
 
   // ============ Instagram ============
   async checkInstagramStatus() {
-    const response = await fetch(`${API_BASE}/instagram-api/status`);
+    const response = await fetch(`${API_BASE}/instagram-api/status`, {
+      headers: getAuthHeaders(),
+    });
     if (!response.ok) throw new Error('Failed to check Instagram status');
     return response.json();
   },
 
   async getInstagramAuthUrl() {
     // Instagram uses Facebook's auth flow
-    const response = await fetch(`${API_BASE}/facebook-api/auth`);
+    const response = await fetch(`${API_BASE}/facebook-api/auth`, {
+      headers: getAuthHeaders(),
+    });
     if (!response.ok) throw new Error('Failed to get Instagram auth URL');
     return response.json();
   },
@@ -381,7 +400,10 @@ const api = {
   async createSmartVideoForYouTube(niche = 'general', topic = null) {
     const response = await fetch(`${API_BASE}/smart/create-and-post`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        ...getAuthHeaders(),
+      },
       body: JSON.stringify({ niche, ...(topic && { topic }) }),
     });
     if (!response.ok) throw new Error('Failed to create smart video');
@@ -422,7 +444,10 @@ const api = {
   async createSmartVideoForFacebook(niche = 'general', topic = null) {
     const response = await fetch(`${API_BASE}/facebook/smart/create-and-post`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        ...getAuthHeaders(),
+      },
       body: JSON.stringify({ niche, ...(topic && { topic }) }),
     });
     if (!response.ok) throw new Error('Failed to create Facebook smart video');
@@ -454,6 +479,27 @@ const api = {
   },
 
   // ============ Multi-Platform Smart Generation ============
+
+  // NEW: Async job-based generation (preserves progress, user can navigate away)
+  async createSmartVideoJob(niche = 'general', platforms = ['youtube'], topic = null) {
+    const response = await fetch(`${API_BASE}/smart/create-job`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...getAuthHeaders(),
+      },
+      body: JSON.stringify({
+        niche,
+        topic,
+        platforms,
+        autoPost: true
+      }),
+    });
+    if (!response.ok) throw new Error('Failed to create video generation job');
+    return response.json(); // Returns { success: true, jobId: '...', status: 'queued' }
+  },
+
+  // OLD: Synchronous generation (blocks browser, loses progress if navigating away)
   async createSmartVideo(niche = 'general', platforms = ['youtube'], topic = null) {
     const results = {};
 
@@ -462,7 +508,10 @@ const api = {
         if (platform === 'youtube') {
           const response = await fetch(`${API_BASE}/smart/create-and-post`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+              'Content-Type': 'application/json',
+              ...getAuthHeaders(),
+            },
             body: JSON.stringify({ niche, topic }),
           });
           if (!response.ok) throw new Error('Failed to create YouTube smart video');
@@ -470,7 +519,10 @@ const api = {
         } else if (platform === 'facebook') {
           const response = await fetch(`${API_BASE}/facebook/smart/create-and-post`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+              'Content-Type': 'application/json',
+              ...getAuthHeaders(),
+            },
             body: JSON.stringify({ niche, topic }),
           });
           if (!response.ok) throw new Error('Failed to create Facebook smart video');
@@ -478,7 +530,10 @@ const api = {
         } else if (platform === 'instagram') {
           const response = await fetch(`${API_BASE}/instagram/smart/create-and-post`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+              'Content-Type': 'application/json',
+              ...getAuthHeaders(),
+            },
             body: JSON.stringify({ niche, topic }),
           });
           if (!response.ok) throw new Error('Failed to create Instagram smart video');
@@ -486,7 +541,10 @@ const api = {
         } else if (platform === 'tiktok') {
           const response = await fetch(`${API_BASE}/tiktok/smart/create-and-post`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+              'Content-Type': 'application/json',
+              ...getAuthHeaders(),
+            },
             body: JSON.stringify({ niche, topic }),
           });
           if (!response.ok) throw new Error('Failed to create TikTok smart video');
@@ -536,7 +594,9 @@ const api = {
     await Promise.all(
       platforms.map(async (platform) => {
         try {
-          const response = await fetch(`${API_BASE}/${platform}-api/status`);
+          const response = await fetch(`${API_BASE}/${platform}-api/status`, {
+            headers: getAuthHeaders(),
+          });
           status[platform] = response.ok ? await response.json() : { connected: false };
         } catch {
           status[platform] = { connected: false };

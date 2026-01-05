@@ -1,7 +1,9 @@
 import { chromium } from 'playwright';
 import fs from 'fs';
 import path from 'path';
+import dataAccess from '../../utils/dataAccess.js';
 
+// Legacy paths (fallback)
 const COOKIES_PATH = '/app/data/youtube_cookies.json';
 const USER_DATA_DIR = '/app/data/youtube_profile';
 
@@ -32,10 +34,14 @@ const launchBrowser = async (headless = true) => {
     });
 
     // Load saved cookies if exists
-    if (fs.existsSync(COOKIES_PATH)) {
-        const cookies = JSON.parse(fs.readFileSync(COOKIES_PATH, 'utf8'));
+    const cookies = dataAccess.readJsonFileSync('youtube_cookies.json');
+    if (cookies) {
         await context.addCookies(cookies);
         console.log('   📦 Loaded saved YouTube session');
+    } else if (fs.existsSync(COOKIES_PATH)) {
+        const legacyCookies = JSON.parse(fs.readFileSync(COOKIES_PATH, 'utf8'));
+        await context.addCookies(legacyCookies);
+        console.log('   📦 Loaded saved YouTube session (legacy)');
     }
 
     return { browser, context };
@@ -46,9 +52,15 @@ const launchBrowser = async (headless = true) => {
  */
 const saveCookies = async (context) => {
     const cookies = await context.cookies();
-    const dir = path.dirname(COOKIES_PATH);
-    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-    fs.writeFileSync(COOKIES_PATH, JSON.stringify(cookies, null, 2));
+    try {
+        // Use dataAccess for unified data access
+        await dataAccess.writeJsonFile('youtube_cookies.json', cookies);
+    } catch (err) {
+        // Fallback to legacy path
+        const dir = path.dirname(COOKIES_PATH);
+        if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+        fs.writeFileSync(COOKIES_PATH, JSON.stringify(cookies, null, 2));
+    }
     console.log('   💾 Session saved for future uploads');
 };
 
@@ -214,6 +226,7 @@ export const uploadToYouTube = async (videoPath, { title, description, hashtags 
                     break;
                 }
             } catch (e) {
+                // Selector not found, try next - this is expected behavior
                 continue;
             }
         }

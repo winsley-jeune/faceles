@@ -1,4 +1,26 @@
 services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: viral_shorts_db
+    environment:
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
+      POSTGRES_DB: ${DB_NAME:-viral_shorts}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./trendscraper/src/database/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+      - ./trendscraper/src/database/pg_hba.conf:/docker-entrypoint-initdb.d/02-pg_hba.conf:ro
+      - ./trendscraper/src/database/init_pg_hba.sh:/docker-entrypoint-initdb.d/03-init_pg_hba.sh:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres} -d ${DB_NAME:-viral_shorts}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
   trendscraper:
     build:
       context: ./trendscraper
@@ -19,8 +41,44 @@ services:
       - FACEBOOK_APP_SECRET=${FACEBOOK_APP_SECRET}
       - TIKTOK_CLIENT_KEY=${TIKTOK_CLIENT_KEY}
       - TIKTOK_CLIENT_SECRET=${TIKTOK_CLIENT_SECRET}
+      - JWT_SECRET=${JWT_SECRET}
+      # Database configuration
+      - USE_DATABASE=${USE_DATABASE:-true}
+      - DATABASE_URL=postgresql://${DB_USER:-postgres}:${DB_PASSWORD:-postgres}@postgres:5432/${DB_NAME:-viral_shorts}
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_NAME=${DB_NAME:-viral_shorts}
+      - DB_USER=${DB_USER:-postgres}
+      - DB_PASSWORD=${DB_PASSWORD:-postgres}
+      - DB_SSL=false
+      - SYSTEM_USER_ID=${SYSTEM_USER_ID:-00000000-0000-0000-0000-000000000000}
     volumes:
       - ./videos:/app/videos
-      - ./trendscraper/src/modules:/app/modules
-      - ./trendscraper/src/index.js:/app/index.js
       - ./data:/app/data
+      # MVC Architecture - mount entire src for development
+      - ./trendscraper/src:/app
+      # Preserve node_modules from Docker build (don't overwrite with host)
+      - /app/node_modules
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  dashboard:
+    build:
+      context: ./dashboard
+    ports:
+      - "5174:5173"
+    environment:
+      - VITE_API_URL=http://localhost:3000
+    volumes:
+      # Mount source for hot reload
+      - ./dashboard/src:/app/src
+      - ./dashboard/public:/app/public
+      # Preserve node_modules from Docker build
+      - /app/node_modules
+    depends_on:
+      - trendscraper
+
+volumes:
+  postgres_data:
+    driver: local

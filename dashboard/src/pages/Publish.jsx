@@ -217,7 +217,14 @@ export default function Publish() {
                   </p>
                 </>
               ) : (
-                <span className="badge badge-error"><XCircle size={12} /> Not Connected</span>
+                <>
+                  <span className="badge badge-error"><XCircle size={12} /> Not Connected</span>
+                  <p style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '8px' }}>
+                    {platforms.facebook.authorized
+                      ? 'Link Instagram to your Facebook Page in Meta Business Suite'
+                      : 'Connect Facebook first, then link Instagram'}
+                  </p>
+                </>
               )}
             </div>
           </div>

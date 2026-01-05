@@ -3,21 +3,56 @@ import fs from 'fs';
 import path from 'path';
 import http from 'http';
 import { URL } from 'url';
+import crypto from 'crypto';
+import dataService from '../../services/dataService.js';
 
-const TOKENS_PATH = '/app/data/youtube_tokens.json';
+// Legacy paths (fallback for credentials only)
 const CREDENTIALS_PATH = '/app/data/youtube_credentials.json';
 
+// SECURITY: State store for CSRF protection in OAuth flow
+// Now includes userId to track which user is authorizing
+const stateStore = new Map();
+const STATE_EXPIRY_MS = 10 * 60 * 1000; // 10 minutes
+
+// Cleanup expired states every 5 minutes
+setInterval(() => {
+    const now = Date.now();
+    for (const [state, data] of stateStore.entries()) {
+        if (data.expiresAt < now) {
+            stateStore.delete(state);
+        }
+    }
+}, 5 * 60 * 1000);
+
 /**
- * YouTube API Uploader
+ * YouTube API Uploader - Database Edition
  * Uses official YouTube Data API v3 for reliable uploads
  * Quota: ~6 videos/day (10,000 units, ~1,600 per upload)
+ *
+ * NOW WITH MULTI-TENANT USER ISOLATION:
+ * - Tokens stored per user in PostgreSQL
+ * - Each user has their own YouTube connection
+ * - No cross-user token sharing
  */
+
+/**
+ * Get OAuth redirect URI based on environment
+ */
+const getRedirectUri = () => {
+    if (process.env.YOUTUBE_REDIRECT_URI) {
+        return process.env.YOUTUBE_REDIRECT_URI;
+    }
+    if (process.env.NODE_ENV === 'production') {
+        const baseUrl = process.env.BASE_URL || 'https://localhost:8085';
+        return `${baseUrl}/oauth2callback`;
+    }
+    return 'http://localhost:8085/oauth2callback';
+};
 
 /**
  * Get OAuth2 client with credentials
  */
 const getOAuth2Client = () => {
-    // Try environment variables first
     let clientId = process.env.YOUTUBE_CLIENT_ID;
     let clientSecret = process.env.YOUTUBE_CLIENT_SECRET;
 
@@ -29,44 +64,80 @@ const getOAuth2Client = () => {
     }
 
     if (!clientId || !clientSecret) {
-        throw new Error('YouTube API credentials not found. Set YOUTUBE_CLIENT_ID and YOUTUBE_CLIENT_SECRET env vars or place credentials in /app/data/youtube_credentials.json');
+        throw new Error('YouTube API credentials not found. Set YOUTUBE_CLIENT_ID and YOUTUBE_CLIENT_SECRET env vars');
     }
 
     const oauth2Client = new google.auth.OAuth2(
         clientId,
         clientSecret,
-        'http://localhost:8085/oauth2callback'
+        getRedirectUri()
     );
 
     return oauth2Client;
 };
 
 /**
- * Load saved tokens
+ * Load saved tokens for user from database
+ * @param {string} userId - User ID (required)
  */
-const loadTokens = () => {
-    if (fs.existsSync(TOKENS_PATH)) {
-        return JSON.parse(fs.readFileSync(TOKENS_PATH, 'utf8'));
+const loadTokens = async (userId) => {
+    try {
+        const tokenData = await dataService.tokens.getToken(userId, 'youtube');
+        if (!tokenData) return null;
+
+        return {
+            access_token: tokenData.accessToken,
+            refresh_token: tokenData.refreshToken,
+            scope: tokenData.scope,
+            token_type: tokenData.tokenType || 'Bearer',
+            expiry_date: tokenData.expiresAt ? new Date(tokenData.expiresAt).getTime() : null
+        };
+    } catch (err) {
+        console.error('Failed to load YouTube tokens:', err.message);
+        return null;
     }
-    return null;
 };
 
 /**
- * Save tokens to file
+ * Save tokens to database for user
+ * @param {string} userId - User ID (required)
+ * @param {object} tokens - OAuth tokens from Google
  */
-const saveTokens = (tokens) => {
-    const dir = path.dirname(TOKENS_PATH);
-    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-    fs.writeFileSync(TOKENS_PATH, JSON.stringify(tokens, null, 2));
-    console.log('   💾 YouTube API tokens saved');
+const saveTokens = async (userId, tokens) => {
+    try {
+        await dataService.tokens.saveToken(userId, 'youtube', {
+            accessToken: tokens.access_token,
+            refreshToken: tokens.refresh_token,
+            expiresAt: tokens.expiry_date ? new Date(tokens.expiry_date) : null,
+            scope: tokens.scope,
+            tokenType: tokens.token_type || 'Bearer'
+        });
+        console.log(`   💾 [User: ${userId}] YouTube API tokens saved`);
+    } catch (err) {
+        console.error('Failed to save YouTube tokens:', err.message);
+        throw err;
+    }
 };
 
 /**
  * Interactive OAuth flow - opens browser for authorization
  * Returns authorization URL for user to visit
+ * @param {string} userId - User ID (required for multi-tenant isolation)
  */
-export const getAuthUrl = () => {
+export const getAuthUrl = (userId) => {
+    if (!userId) {
+        throw new Error('userId is required for YouTube OAuth');
+    }
+
     const oauth2Client = getOAuth2Client();
+
+    // SECURITY: Generate cryptographic state parameter for CSRF protection
+    const state = crypto.randomBytes(32).toString('hex');
+    stateStore.set(state, {
+        userId,  // Store userId to retrieve in callback
+        createdAt: Date.now(),
+        expiresAt: Date.now() + STATE_EXPIRY_MS
+    });
 
     const authUrl = oauth2Client.generateAuthUrl({
         access_type: 'offline',
@@ -74,7 +145,8 @@ export const getAuthUrl = () => {
             'https://www.googleapis.com/auth/youtube.upload',
             'https://www.googleapis.com/auth/youtube'
         ],
-        prompt: 'consent' // Force to get refresh token
+        prompt: 'consent', // Force to get refresh token
+        state: state // CSRF protection
     });
 
     return authUrl;
@@ -91,11 +163,35 @@ export const startOAuthServer = () => {
 
                 if (url.pathname === '/oauth2callback') {
                     const code = url.searchParams.get('code');
+                    const state = url.searchParams.get('state');
+
+                    // SECURITY: Validate state parameter to prevent CSRF attacks
+                    const stateData = stateStore.get(state);
+                    if (!state || !stateData) {
+                        res.writeHead(400, { 'Content-Type': 'text/html' });
+                        res.end(`
+                            <html>
+                                <body style="font-family: Arial; text-align: center; padding: 50px;">
+                                    <h1>Security Error</h1>
+                                    <p>Invalid or expired state parameter. Please try again.</p>
+                                </body>
+                            </html>
+                        `);
+                        server.close();
+                        reject(new Error('Invalid state parameter - possible CSRF attack'));
+                        return;
+                    }
+
+                    // Extract userId from state
+                    const userId = stateData.userId;
+
+                    // Remove state to prevent reuse
+                    stateStore.delete(state);
 
                     if (code) {
                         const oauth2Client = getOAuth2Client();
                         const { tokens } = await oauth2Client.getToken(code);
-                        saveTokens(tokens);
+                        await saveTokens(userId, tokens);
 
                         res.writeHead(200, { 'Content-Type': 'text/html' });
                         res.end(`
@@ -109,225 +205,213 @@ export const startOAuthServer = () => {
                         `);
 
                         server.close();
-                        resolve({ success: true, tokens });
+                        resolve({ success: true, tokens, userId });
                     } else {
                         res.writeHead(400);
                         res.end('No authorization code received');
                         server.close();
-                        reject(new Error('No authorization code'));
+                        reject(new Error('No authorization code received'));
                     }
                 }
             } catch (error) {
+                console.error('OAuth callback error:', error);
                 res.writeHead(500);
-                res.end('Error processing authorization');
+                res.end('Internal server error');
                 server.close();
                 reject(error);
             }
         });
 
         server.listen(8085, () => {
-            console.log('   OAuth callback server listening on port 8085');
+            console.log('   ⏳ Waiting for YouTube authorization...');
+            console.log('   (Listening on http://localhost:8085/oauth2callback)');
+
+            // Timeout after 5 minutes
+            setTimeout(() => {
+                server.close();
+                reject(new Error('OAuth flow timed out after 5 minutes'));
+            }, 5 * 60 * 1000);
         });
 
-        // Timeout after 5 minutes
-        setTimeout(() => {
-            server.close();
-            reject(new Error('OAuth timeout - no response received'));
-        }, 300000);
+        server.on('error', (err) => {
+            reject(err);
+        });
     });
 };
 
 /**
- * Exchange authorization code for tokens (manual flow)
+ * Manual code exchange (for when redirect doesn't work)
+ * @param {string} userId - User ID (required)
+ * @param {string} code - Authorization code from Google
  */
-export const exchangeCode = async (code) => {
-    const oauth2Client = getOAuth2Client();
-    const { tokens } = await oauth2Client.getToken(code);
-    saveTokens(tokens);
-    return { success: true, message: 'Tokens saved successfully' };
-};
-
-/**
- * Get authenticated YouTube client
- */
-const getYouTubeClient = async () => {
-    const oauth2Client = getOAuth2Client();
-    const tokens = loadTokens();
-
-    if (!tokens) {
-        throw new Error('No YouTube tokens found. Run authorization first via /youtube-api/auth');
-    }
-
-    oauth2Client.setCredentials(tokens);
-
-    // Auto-refresh token if expired
-    oauth2Client.on('tokens', (newTokens) => {
-        const updatedTokens = { ...tokens, ...newTokens };
-        saveTokens(updatedTokens);
-        console.log('   🔄 YouTube tokens refreshed');
-    });
-
-    return google.youtube({ version: 'v3', auth: oauth2Client });
-};
-
-/**
- * Upload video to YouTube using official API
- */
-export const uploadToYouTubeAPI = async (videoPath, { title, description, hashtags = [], tags = [], categoryId = '22' }) => {
-    console.log('📤 Uploading to YouTube via API...');
-
-    if (!fs.existsSync(videoPath)) {
-        throw new Error(`Video file not found: ${videoPath}`);
+export const exchangeCode = async (userId, code) => {
+    if (!userId) {
+        throw new Error('userId is required for token exchange');
     }
 
     try {
-        const youtube = await getYouTubeClient();
+        const oauth2Client = getOAuth2Client();
+        const { tokens } = await oauth2Client.getToken(code);
+        await saveTokens(userId, tokens);
+        return { success: true, message: 'Tokens saved successfully' };
+    } catch (error) {
+        console.error('Token exchange error:', error);
+        return { success: false, error: error.message };
+    }
+};
 
-        // Prepare metadata
-        const videoTitle = title.slice(0, 100); // YouTube title limit
-        const fullDescription = `${description}\n\n${hashtags.join(' ')}`.slice(0, 5000);
+/**
+ * Upload video to YouTube
+ * @param {string} userId - User ID (required)
+ * @param {string} videoPath - Path to video file
+ * @param {object} metadata - Video metadata
+ */
+export const uploadToYouTubeAPI = async (userId, videoPath, metadata = {}) => {
+    if (!userId) {
+        throw new Error('userId is required for YouTube upload');
+    }
 
-        // Combine hashtags and tags
-        const videoTags = [
-            ...tags,
-            ...hashtags.map(h => h.replace('#', '')),
-            'Shorts'
-        ].slice(0, 500); // Tag limit
+    try {
+        // Load user's tokens
+        const tokens = await loadTokens(userId);
+        if (!tokens) {
+            throw new Error('Not authorized. Please connect your YouTube account first.');
+        }
 
-        console.log(`   📋 Title: ${videoTitle}`);
-        console.log(`   #️⃣ Tags: ${videoTags.slice(0, 5).join(', ')}...`);
+        const oauth2Client = getOAuth2Client();
+        oauth2Client.setCredentials(tokens);
 
-        // Upload video
-        const res = await youtube.videos.insert({
-            part: ['snippet', 'status'],
+        const youtube = google.youtube({ version: 'v3', auth: oauth2Client });
+
+        const {
+            title = 'Untitled Short',
+            description = '',
+            hashtags = [],
+            tags = [],
+            categoryId = '22',
+            privacyStatus = 'public'
+        } = metadata;
+
+        // Format description with hashtags
+        const fullDescription = description + '\n\n' + hashtags.join(' ');
+
+        console.log(`   📤 [User: ${userId}] Uploading to YouTube: ${title}`);
+
+        const response = await youtube.videos.insert({
+            part: 'snippet,status',
             requestBody: {
                 snippet: {
-                    title: videoTitle,
+                    title,
                     description: fullDescription,
-                    tags: videoTags,
-                    categoryId: categoryId, // 22 = People & Blogs, 27 = Education, 28 = Science & Tech
-                    defaultLanguage: 'en',
-                    defaultAudioLanguage: 'en'
+                    tags,
+                    categoryId
                 },
                 status: {
-                    privacyStatus: 'public', // 'public', 'private', or 'unlisted'
-                    selfDeclaredMadeForKids: false,
-                    madeForKids: false
+                    privacyStatus,
+                    selfDeclaredMadeForKids: false
                 }
             },
             media: {
                 body: fs.createReadStream(videoPath)
             }
-        }, {
-            // Upload progress callback
-            onUploadProgress: (evt) => {
-                const progress = Math.round((evt.bytesRead / fs.statSync(videoPath).size) * 100);
-                if (progress % 20 === 0) {
-                    console.log(`   ⬆️ Upload progress: ${progress}%`);
-                }
-            }
         });
 
-        const videoId = res.data.id;
+        const videoId = response.data.id;
         const videoUrl = `https://youtube.com/shorts/${videoId}`;
 
-        console.log(`   ✅ Video uploaded successfully!`);
-        console.log(`   🔗 URL: ${videoUrl}`);
+        console.log(`   ✅ [User: ${userId}] YouTube upload successful: ${videoUrl}`);
 
         return {
             success: true,
-            platform: 'youtube',
-            videoId: videoId,
-            videoUrl: videoUrl,
-            message: 'Video uploaded to YouTube via API'
+            videoId,
+            videoUrl,
+            title,
+            platform: 'youtube'
         };
-
     } catch (error) {
-        console.error('   ❌ YouTube API upload failed:', error.message);
+        console.error(`   ❌ [User: ${userId}] YouTube upload failed:`, error.message);
 
-        // Handle specific errors
-        if (error.message.includes('quota')) {
+        if (error.message?.includes('invalid_grant') || error.message?.includes('Token has been expired')) {
             return {
                 success: false,
-                platform: 'youtube',
-                error: 'YouTube API quota exceeded. Try again tomorrow or use browser automation.',
-                quotaExceeded: true
-            };
-        }
-
-        if (error.message.includes('invalid_grant') || error.message.includes('Token has been expired')) {
-            return {
-                success: false,
-                platform: 'youtube',
-                error: 'YouTube tokens expired. Re-authorize via /youtube-api/auth',
-                tokenExpired: true
+                error: 'YouTube authorization expired. Please reconnect your account.',
+                needsReauth: true
             };
         }
 
         return {
             success: false,
-            platform: 'youtube',
             error: error.message
         };
     }
 };
 
 /**
- * Check if YouTube API is authorized and tokens are valid
+ * Check YouTube API connection status for user
+ * @param {string} userId - User ID (required)
  */
-export const checkYouTubeAPIStatus = async () => {
-    try {
-        const tokens = loadTokens();
+export const checkYouTubeAPIStatus = async (userId) => {
+    if (!userId) {
+        return {
+            authorized: false,
+            error: 'userId is required'
+        };
+    }
 
+    try {
+        const tokens = await loadTokens(userId);
         if (!tokens) {
             return {
                 authorized: false,
-                message: 'Not authorized. Visit /youtube-api/auth to authorize.'
+                message: 'Not connected to YouTube'
             };
         }
 
-        // Try to get channel info to verify tokens work
-        const youtube = await getYouTubeClient();
-        const res = await youtube.channels.list({
-            part: ['snippet'],
+        const oauth2Client = getOAuth2Client();
+        oauth2Client.setCredentials(tokens);
+
+        const youtube = google.youtube({ version: 'v3', auth: oauth2Client });
+
+        // Try to get channel info
+        const response = await youtube.channels.list({
+            part: 'snippet,statistics',
             mine: true
         });
 
-        if (res.data.items && res.data.items.length > 0) {
-            const channel = res.data.items[0];
+        if (response.data.items && response.data.items.length > 0) {
+            const channel = response.data.items[0];
             return {
                 authorized: true,
                 channel: {
                     id: channel.id,
                     title: channel.snippet.title,
-                    thumbnail: channel.snippet.thumbnails?.default?.url
-                },
-                message: `Authorized as: ${channel.snippet.title}`
+                    subscriberCount: channel.statistics.subscriberCount,
+                    videoCount: channel.statistics.videoCount
+                }
             };
         }
 
-        return {
-            authorized: false,
-            message: 'Could not verify channel access'
-        };
-
+        return { authorized: false, message: 'No YouTube channel found' };
     } catch (error) {
-        return {
-            authorized: false,
-            message: error.message,
-            tokenExpired: error.message.includes('invalid_grant')
-        };
+        console.error(`   [User: ${userId}] YouTube status check failed:`, error.message);
+
+        if (error.message?.includes('invalid_grant') || error.message?.includes('Token has been expired')) {
+            return {
+                authorized: false,
+                error: 'Authorization expired. Please reconnect.',
+                needsReauth: true
+            };
+        }
+
+        return { authorized: false, error: error.message };
     }
 };
 
 /**
- * Get remaining quota estimate (rough calculation)
+ * Get quota status
  */
 export const getQuotaStatus = () => {
     // YouTube API quota resets at midnight Pacific Time
-    // Each upload costs ~1600 units, daily limit is 10,000
-    // This is a rough estimate - actual usage tracking would require storing upload counts
-
     const now = new Date();
     const pacificTime = new Date(now.toLocaleString('en-US', { timeZone: 'America/Los_Angeles' }));
     const midnight = new Date(pacificTime);
@@ -345,15 +429,22 @@ export const getQuotaStatus = () => {
 };
 
 /**
- * Disconnect YouTube API - remove stored tokens
+ * Disconnect YouTube API - remove user's stored tokens
+ * @param {string} userId - User ID (required)
  */
-export const disconnectYouTubeAPI = () => {
-    if (fs.existsSync(TOKENS_PATH)) {
-        fs.unlinkSync(TOKENS_PATH);
-        console.log('   🔓 YouTube tokens removed');
-        return { success: true, message: 'YouTube disconnected successfully' };
+export const disconnectYouTubeAPI = async (userId) => {
+    if (!userId) {
+        throw new Error('userId is required to disconnect YouTube');
     }
-    return { success: true, message: 'No YouTube tokens to remove' };
+
+    try {
+        await dataService.tokens.deleteToken(userId, 'youtube');
+        console.log(`   🔓 [User: ${userId}] YouTube tokens removed`);
+        return { success: true, message: 'YouTube disconnected successfully' };
+    } catch (err) {
+        console.error('Failed to disconnect YouTube:', err.message);
+        return { success: false, error: err.message };
+    }
 };
 
 export default {

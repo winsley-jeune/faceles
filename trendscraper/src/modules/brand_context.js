@@ -1,10 +1,4 @@
-import fs from "fs";
-import path from "path";
-import { fileURLToPath } from "url";
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-const DATA_PATH = path.join(__dirname, "../../../data/brand_context.json");
+import dataService from '../services/dataService.js';
 
 // Default brand context structure
 const DEFAULT_BRAND_CONTEXT = {
@@ -98,13 +92,14 @@ const DEFAULT_BRAND_CONTEXT = {
 };
 
 /**
- * Load brand context from file
+ * Load brand context from database
+ * @param {string} userId - User ID
  */
-export function loadBrandContext() {
+export async function loadBrandContext(userId) {
   try {
-    if (fs.existsSync(DATA_PATH)) {
-      const data = fs.readFileSync(DATA_PATH, "utf8");
-      return JSON.parse(data);
+    const context = await dataService.brandContext.get(userId);
+    if (context) {
+      return context;
     }
     return { ...DEFAULT_BRAND_CONTEXT };
   } catch (error) {
@@ -114,12 +109,13 @@ export function loadBrandContext() {
 }
 
 /**
- * Save brand context to file
+ * Save brand context to database
+ * @param {string} userId - User ID
+ * @param {object} context - Brand context data
  */
-export function saveBrandContext(context) {
+export async function saveBrandContext(userId, context) {
   try {
-    context.lastUpdated = new Date().toISOString();
-    fs.writeFileSync(DATA_PATH, JSON.stringify(context, null, 2));
+    await dataService.brandContext.save(userId, context);
     return true;
   } catch (error) {
     console.error("Error saving brand context:", error);
@@ -129,22 +125,27 @@ export function saveBrandContext(context) {
 
 /**
  * Update specific section of brand context
+ * @param {string} userId - User ID
+ * @param {string} section - Section to update
+ * @param {object} data - Section data
  */
-export function updateBrandSection(section, data) {
-  const context = loadBrandContext();
+export async function updateBrandSection(userId, section, data) {
+  const context = await loadBrandContext(userId);
   if (context[section]) {
     context[section] = { ...context[section], ...data };
   } else {
     context[section] = data;
   }
-  return saveBrandContext(context);
+  return saveBrandContext(userId, context);
 }
 
 /**
  * Complete onboarding and mark brand context as setup
+ * @param {string} userId - User ID
+ * @param {object} brandData - Brand data
  */
-export function completeOnboarding(brandData) {
-  const context = loadBrandContext();
+export async function completeOnboarding(userId, brandData) {
+  const context = await loadBrandContext(userId);
 
   // Merge in all the brand data
   if (brandData.business) context.business = { ...context.business, ...brandData.business };
@@ -154,14 +155,16 @@ export function completeOnboarding(brandData) {
   if (brandData.contentGoals) context.contentGoals = { ...context.contentGoals, ...brandData.contentGoals };
 
   context.onboardingComplete = true;
-  return saveBrandContext(context);
+  return saveBrandContext(userId, context);
 }
 
 /**
  * Add a product to the brand
+ * @param {string} userId - User ID
+ * @param {object} product - Product data
  */
-export function addProduct(product) {
-  const context = loadBrandContext();
+export async function addProduct(userId, product) {
+  const context = await loadBrandContext(userId);
   const newProduct = {
     id: Date.now().toString(),
     name: product.name || "",
@@ -173,19 +176,22 @@ export function addProduct(product) {
     createdAt: new Date().toISOString()
   };
   context.products.push(newProduct);
-  saveBrandContext(context);
+  await saveBrandContext(userId, context);
   return newProduct;
 }
 
 /**
  * Update a product
+ * @param {string} userId - User ID
+ * @param {string} productId - Product ID
+ * @param {object} updates - Product updates
  */
-export function updateProduct(productId, updates) {
-  const context = loadBrandContext();
+export async function updateProduct(userId, productId, updates) {
+  const context = await loadBrandContext(userId);
   const index = context.products.findIndex(p => p.id === productId);
   if (index !== -1) {
     context.products[index] = { ...context.products[index], ...updates };
-    saveBrandContext(context);
+    await saveBrandContext(userId, context);
     return context.products[index];
   }
   return null;
@@ -193,13 +199,15 @@ export function updateProduct(productId, updates) {
 
 /**
  * Delete a product
+ * @param {string} userId - User ID
+ * @param {string} productId - Product ID
  */
-export function deleteProduct(productId) {
-  const context = loadBrandContext();
+export async function deleteProduct(userId, productId) {
+  const context = await loadBrandContext(userId);
   const index = context.products.findIndex(p => p.id === productId);
   if (index !== -1) {
     context.products.splice(index, 1);
-    saveBrandContext(context);
+    await saveBrandContext(userId, context);
     return true;
   }
   return false;
@@ -207,9 +215,12 @@ export function deleteProduct(productId) {
 
 /**
  * Get CTA templates based on content goal and industry
+ * @param {string} userId - User ID
+ * @param {string} contentGoal - Content goal
+ * @param {string} industry - Industry
  */
-export function getCTATemplates(contentGoal, industry) {
-  const context = loadBrandContext();
+export async function getCTATemplates(userId, contentGoal, industry) {
+  const context = await loadBrandContext(userId);
   const templates = context.templates?.ctaTemplates?.[contentGoal] || [];
 
   // Replace placeholders with brand data
@@ -225,17 +236,20 @@ export function getCTATemplates(contentGoal, industry) {
 
 /**
  * Get hook templates based on industry
+ * @param {string} userId - User ID
+ * @param {string} industry - Industry
  */
-export function getHookTemplates(industry) {
-  const context = loadBrandContext();
+export async function getHookTemplates(userId, industry) {
+  const context = await loadBrandContext(userId);
   return context.templates?.hookTemplates?.[industry] || [];
 }
 
 /**
  * Generate brand-aware prompt context for AI script generation
+ * @param {string} userId - User ID
  */
-export function generatePromptContext() {
-  const context = loadBrandContext();
+export async function generatePromptContext(userId) {
+  const context = await loadBrandContext(userId);
 
   if (!context.onboardingComplete) {
     return null;
@@ -272,9 +286,10 @@ export function generatePromptContext() {
 
 /**
  * Generate a brand context summary for AI prompts
+ * @param {string} userId - User ID
  */
-export function generateBrandSummary() {
-  const ctx = generatePromptContext();
+export async function generateBrandSummary(userId) {
+  const ctx = await generatePromptContext(userId);
 
   if (!ctx) {
     return "";
@@ -318,17 +333,20 @@ CALL TO ACTION: ${ctx.callToActions[0]}
 
 /**
  * Get industry preset settings
+ * @param {string} userId - User ID
+ * @param {string} industry - Industry
  */
-export function getIndustryPreset(industry) {
-  const context = loadBrandContext();
+export async function getIndustryPreset(userId, industry) {
+  const context = await loadBrandContext(userId);
   return context.industryPresets?.[industry] || null;
 }
 
 /**
  * Check if brand context is complete
+ * @param {string} userId - User ID
  */
-export function isBrandContextComplete() {
-  const context = loadBrandContext();
+export async function isBrandContextComplete(userId) {
+  const context = await loadBrandContext(userId);
   return context.onboardingComplete &&
          context.business?.name &&
          context.business?.industry;

@@ -1,11 +1,9 @@
-import fs from 'fs';
-import path from 'path';
-
-const CONFIG_PATH = '/app/data/content_config.json';
+import dataService from '../../services/dataService.js';
 
 /**
  * Content Configuration Manager
  * Stores and manages AI-learned recommendations for content generation
+ * Multi-tenant with database storage
  */
 
 // Default config when starting fresh
@@ -113,11 +111,12 @@ const DEFAULT_CONFIG = {
 
 /**
  * Load current content config
+ * @param {string} userId - User ID
  */
-export const loadContentConfig = () => {
+export const loadContentConfig = async (userId) => {
     try {
-        if (fs.existsSync(CONFIG_PATH)) {
-            const config = JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf8'));
+        const config = await dataService.contentConfig.get(userId);
+        if (config) {
             return { ...DEFAULT_CONFIG, ...config };
         }
     } catch (error) {
@@ -128,22 +127,27 @@ export const loadContentConfig = () => {
 
 /**
  * Save content config
+ * @param {string} userId - User ID
+ * @param {object} config - Config data
  */
-export const saveContentConfig = (config) => {
-    const dir = path.dirname(CONFIG_PATH);
-    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-
-    config.lastUpdated = new Date().toISOString();
-    fs.writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 2));
-    console.log('   💾 Content config saved');
-    return config;
+export const saveContentConfig = async (userId, config) => {
+    try {
+        await dataService.contentConfig.save(userId, config);
+        console.log('   💾 Content config saved');
+        return config;
+    } catch (error) {
+        console.error('Error saving content config:', error.message);
+        return config;
+    }
 };
 
 /**
  * Update config from weekly analysis
+ * @param {string} userId - User ID
+ * @param {object} analysis - Analysis data
  */
-export const updateFromAnalysis = (analysis) => {
-    const config = loadContentConfig();
+export const updateFromAnalysis = async (userId, analysis) => {
+    const config = await loadContentConfig(userId);
 
     console.log('   🔄 Updating content config from analysis...');
 
@@ -237,15 +241,16 @@ export const updateFromAnalysis = (analysis) => {
         config.learningHistory = config.learningHistory.slice(-10);
     }
 
-    return saveContentConfig(config);
+    return saveContentConfig(userId, config);
 };
 
 /**
  * Get prompt enhancement for storyboard generation
  * This is what gets injected into the Gemini prompt
+ * @param {string} userId - User ID
  */
-export const getStoryboardEnhancement = () => {
-    const config = loadContentConfig();
+export const getStoryboardEnhancement = async (userId) => {
+    const config = await loadContentConfig(userId);
 
     let enhancement = `
 CONTENT OPTIMIZATION RULES (Based on channel performance data):
@@ -292,9 +297,10 @@ ${config.currentPriority}
 
 /**
  * Get next suggested video to generate
+ * @param {string} userId - User ID
  */
-export const getNextSuggestedVideo = () => {
-    const config = loadContentConfig();
+export const getNextSuggestedVideo = async (userId) => {
+    const config = await loadContentConfig(userId);
 
     if (config.topics.suggested && config.topics.suggested.length > 0) {
         return config.topics.suggested[0];
@@ -304,30 +310,35 @@ export const getNextSuggestedVideo = () => {
 
 /**
  * Mark a suggested video as generated
+ * @param {string} userId - User ID
+ * @param {string} topic - Topic to mark as generated
  */
-export const markVideoGenerated = (topic) => {
-    const config = loadContentConfig();
+export const markVideoGenerated = async (userId, topic) => {
+    const config = await loadContentConfig(userId);
 
     config.topics.suggested = config.topics.suggested.filter(
         v => v.topic !== topic
     );
 
-    saveContentConfig(config);
+    await saveContentConfig(userId, config);
 };
 
 /**
  * Reset config to defaults
+ * @param {string} userId - User ID
  */
-export const resetConfig = () => {
-    return saveContentConfig(DEFAULT_CONFIG);
+export const resetConfig = async (userId) => {
+    return saveContentConfig(userId, DEFAULT_CONFIG);
 };
 
 /**
  * Get visual enhancement for a specific scene type
  * This is used by visuals_pro.js to enhance image prompts
+ * @param {string} userId - User ID
+ * @param {string} sceneType - Scene type (hook, body, cta)
  */
-export const getVisualEnhancement = (sceneType = 'body') => {
-    const config = loadContentConfig();
+export const getVisualEnhancement = async (userId, sceneType = 'body') => {
+    const config = await loadContentConfig(userId);
     const visuals = config.visuals || DEFAULT_CONFIG.visuals;
 
     if (sceneType === 'hook') {
@@ -363,9 +374,11 @@ export const getVisualEnhancement = (sceneType = 'body') => {
 /**
  * Get the hook image specific prompt enhancement
  * This creates the most eye-catching first frame possible
+ * @param {string} userId - User ID
+ * @param {string} basePrompt - Base prompt for the image
  */
-export const getHookImagePrompt = (basePrompt) => {
-    const config = loadContentConfig();
+export const getHookImagePrompt = async (userId, basePrompt) => {
+    const config = await loadContentConfig(userId);
     const hookVisuals = config.visuals?.hook || DEFAULT_CONFIG.visuals.hook;
 
     // Build enhanced prompt for hook/thumbnail

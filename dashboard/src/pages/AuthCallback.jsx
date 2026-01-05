@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { Loader2, CheckCircle, XCircle } from 'lucide-react';
@@ -9,28 +9,43 @@ export default function AuthCallback() {
   const { handleOAuthCallback } = useAuth();
   const [status, setStatus] = useState('processing');
   const [error, setError] = useState(null);
+  const hasProcessed = useRef(false);
 
   useEffect(() => {
+    // Prevent duplicate processing (React StrictMode runs effects twice in dev)
+    if (hasProcessed.current) return;
+    hasProcessed.current = true;
+
     const processCallback = async () => {
       const code = searchParams.get('code');
+      const state = searchParams.get('state');
       const provider = searchParams.get('provider') ||
         window.location.pathname.split('/').pop();
       const errorParam = searchParams.get('error');
 
       if (errorParam) {
+        // Clear any stale auth token on OAuth error
+        localStorage.removeItem('auth_token');
         setStatus('error');
         setError(searchParams.get('error_description') || 'Authentication was cancelled');
         return;
       }
 
       if (!code) {
+        // Clear any stale auth token
+        localStorage.removeItem('auth_token');
         setStatus('error');
         setError('No authorization code received');
         return;
       }
 
+      // State is optional - backend will handle missing state gracefully
+      if (!state) {
+        console.warn('OAuth state parameter missing - proceeding without it');
+      }
+
       try {
-        const success = await handleOAuthCallback(provider, code);
+        const success = await handleOAuthCallback(provider, code, state);
         if (success) {
           setStatus('success');
 
@@ -47,10 +62,14 @@ export default function AuthCallback() {
             setTimeout(() => navigate(returnPath), 1500);
           }
         } else {
+          // Clear any stale auth token on failure
+          localStorage.removeItem('auth_token');
           setStatus('error');
           setError('Failed to complete authentication');
         }
       } catch (err) {
+        // Clear any stale auth token on failure
+        localStorage.removeItem('auth_token');
         setStatus('error');
         setError(err.message || 'Authentication failed');
       }

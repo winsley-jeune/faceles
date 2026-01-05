@@ -3,7 +3,7 @@ import { useEffect } from 'react';
 import {
   Home, Video, Upload, BarChart3, Settings,
   Zap, LogOut, Link2, LogIn, Youtube, Facebook, Instagram,
-  CheckCircle, AlertCircle, Loader2, Building2
+  CheckCircle, AlertCircle, Loader2, Building2, Sliders, Package, GraduationCap, FlaskConical, CreditCard, Megaphone, Briefcase
 } from 'lucide-react';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { usePlatformStatus } from './hooks/usePlatformStatus';
@@ -16,9 +16,17 @@ import Analytics from './pages/Analytics';
 import SettingsPage from './pages/Settings';
 import Login from './pages/Login';
 import AuthCallback from './pages/AuthCallback';
+import AuthDebug from './pages/AuthDebug';
 import SocialConnections from './pages/SocialConnections';
 import Onboarding from './pages/Onboarding';
 import BrandSettings from './pages/BrandSettings';
+import ExplorationConfig from './pages/ExplorationConfig';
+import ProductVideoGenerator from './pages/ProductVideoGenerator';
+import TrainingVideoGenerator from './pages/TrainingVideoGenerator';
+import ABTesting from './pages/ABTesting';
+import Monetization from './pages/Monetization';
+import PromoSettings from './pages/PromoSettings';
+import Jobs from './pages/Jobs';
 
 // TikTok icon
 const TikTokIcon = ({ size = 16 }) => (
@@ -114,9 +122,21 @@ function Sidebar() {
             <Zap size={20} />
             Create Video
           </NavLink>
+          <NavLink to="/product-video" className={({isActive}) => `nav-item ${isActive ? 'active' : ''}`}>
+            <Package size={20} />
+            Product Videos
+          </NavLink>
+          <NavLink to="/training-video" className={({isActive}) => `nav-item ${isActive ? 'active' : ''}`}>
+            <GraduationCap size={20} />
+            Training Videos
+          </NavLink>
           <NavLink to="/videos" className={({isActive}) => `nav-item ${isActive ? 'active' : ''}`}>
             <Video size={20} />
             My Videos
+          </NavLink>
+          <NavLink to="/jobs" className={({isActive}) => `nav-item ${isActive ? 'active' : ''}`}>
+            <Briefcase size={20} />
+            Jobs
           </NavLink>
         </div>
 
@@ -134,10 +154,26 @@ function Sidebar() {
             <BarChart3 size={20} />
             Analytics
           </NavLink>
+          <NavLink to="/ab-testing" className={({isActive}) => `nav-item ${isActive ? 'active' : ''}`}>
+            <FlaskConical size={20} />
+            A/B Testing
+          </NavLink>
+          <NavLink to="/exploration" className={({isActive}) => `nav-item ${isActive ? 'active' : ''}`}>
+            <Sliders size={20} />
+            Exploration
+          </NavLink>
         </div>
 
         <div className="nav-section">
           <div className="nav-section-title">System</div>
+          <NavLink to="/monetization" className={({isActive}) => `nav-item ${isActive ? 'active' : ''}`}>
+            <CreditCard size={20} />
+            Monetization
+          </NavLink>
+          <NavLink to="/promo" className={({isActive}) => `nav-item ${isActive ? 'active' : ''}`}>
+            <Megaphone size={20} />
+            Promo Content
+          </NavLink>
           <NavLink to="/brand" className={({isActive}) => `nav-item ${isActive ? 'active' : ''}`}>
             <Building2 size={20} />
             Brand Settings
@@ -479,6 +515,7 @@ function App() {
           {/* Public routes */}
           <Route path="/login" element={<Login />} />
           <Route path="/auth/callback/:provider" element={<AuthCallback />} />
+          <Route path="/auth-debug" element={<AuthDebug />} />
 
           {/* Onboarding (protected but separate from main layout) */}
           <Route path="/onboarding" element={
@@ -490,11 +527,18 @@ function App() {
           {/* Protected routes - require login */}
           <Route path="/dashboard" element={<ProtectedRoute><AppLayout><Dashboard /></AppLayout></ProtectedRoute>} />
           <Route path="/create" element={<ProtectedRoute><AppLayout><CreateVideo /></AppLayout></ProtectedRoute>} />
+          <Route path="/product-video" element={<ProtectedRoute><AppLayout><ProductVideoGenerator /></AppLayout></ProtectedRoute>} />
+          <Route path="/training-video" element={<ProtectedRoute><AppLayout><TrainingVideoGenerator /></AppLayout></ProtectedRoute>} />
           <Route path="/videos" element={<ProtectedRoute><AppLayout><Videos /></AppLayout></ProtectedRoute>} />
+          <Route path="/jobs" element={<ProtectedRoute><AppLayout><Jobs /></AppLayout></ProtectedRoute>} />
           <Route path="/publish" element={<ProtectedRoute><AppLayout><Publish /></AppLayout></ProtectedRoute>} />
           <Route path="/analytics" element={<ProtectedRoute><AppLayout><Analytics /></AppLayout></ProtectedRoute>} />
+          <Route path="/ab-testing" element={<ProtectedRoute><AppLayout><ABTesting /></AppLayout></ProtectedRoute>} />
+          <Route path="/exploration" element={<ProtectedRoute><AppLayout><ExplorationConfig /></AppLayout></ProtectedRoute>} />
           <Route path="/connections" element={<ProtectedRoute><AppLayout><SocialConnections /></AppLayout></ProtectedRoute>} />
           <Route path="/brand" element={<ProtectedRoute><AppLayout><BrandSettings /></AppLayout></ProtectedRoute>} />
+          <Route path="/promo" element={<ProtectedRoute><AppLayout><PromoSettings /></AppLayout></ProtectedRoute>} />
+          <Route path="/monetization" element={<ProtectedRoute><AppLayout><Monetization /></AppLayout></ProtectedRoute>} />
           <Route path="/settings" element={<ProtectedRoute><AppLayout><SettingsPage /></AppLayout></ProtectedRoute>} />
         </Routes>
       </AuthProvider>

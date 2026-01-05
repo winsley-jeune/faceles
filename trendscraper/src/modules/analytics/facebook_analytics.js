@@ -14,19 +14,27 @@
  * - Follower Retention: Are followers staying and engaging?
  */
 
-import fs from 'fs';
-import path from 'path';
-import { fileURLToPath } from 'url';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+import dataService from '../../services/dataService.js';
 
 // Facebook-specific thresholds (organic reach is harder)
 const FACEBOOK_THRESHOLDS = {
+    // View-based thresholds (when available)
     VIRAL: 500,      // 500+ views is viral for organic FB Reels
     GOOD: 200,       // 200+ is solid
     AVERAGE: 50,     // 50-200 is average
     POOR: 20,        // Below 50 is poor
+
+    // ENGAGEMENT-BASED thresholds (primary - since FB doesn't always return views)
+    // These are used when views = 0 (API limitation for Reels)
+    ENGAGEMENT_VIRAL: 50,    // 50+ total engagement (shares + comments + reactions)
+    ENGAGEMENT_GOOD: 20,     // 20-50 is solid
+    ENGAGEMENT_AVERAGE: 10,  // 10-20 is average
+    ENGAGEMENT_POOR: 5,      // 5-10 is poor
+
+    // Weighted engagement (shares are most valuable on FB)
+    SHARE_WEIGHT: 5,         // 1 share = 5 engagement points
+    COMMENT_WEIGHT: 3,       // 1 comment = 3 engagement points
+    REACTION_WEIGHT: 1,      // 1 reaction = 1 engagement point
 
     // Consistency metrics
     MIN_POSTS_FOR_TRUST: 10,  // Need 10+ posts to build trust score
@@ -38,54 +46,64 @@ const FACEBOOK_THRESHOLDS = {
     COMMENT_RATE_TARGET: 0.01  // 1% comment rate is good
 };
 
-// Pattern storage path
-const PATTERNS_FILE = path.join(__dirname, '../../data/facebook_winning_patterns.json');
-
 /**
- * Load or initialize winning patterns
+ * Load or initialize winning patterns for user
  */
-export const loadWinningPatterns = () => {
+export const loadWinningPatterns = async (userId) => {
     try {
-        if (fs.existsSync(PATTERNS_FILE)) {
-            return JSON.parse(fs.readFileSync(PATTERNS_FILE, 'utf8'));
-        }
+        const patterns = await dataService.patterns.getWinningPatterns(userId, 'facebook');
+        return patterns || {
+            winners: [],
+            patterns: {
+                hooks: {},
+                niches: {},
+                postTimes: {},
+                durations: {},
+                formats: {},
+                tones: {}
+            },
+            consistency: {
+                totalPosts: 0,
+                postDates: [],
+                avgEngagement: 0,
+                engagementTrend: []
+            },
+            trustScore: 0,
+            lastUpdated: null
+        };
     } catch (err) {
-        console.error('Error loading FB patterns:', err);
+        console.error('Error loading Facebook patterns:', err);
+        return {
+            winners: [],
+            patterns: {
+                hooks: {},
+                niches: {},
+                postTimes: {},
+                durations: {},
+                formats: {},
+                tones: {}
+            },
+            consistency: {
+                totalPosts: 0,
+                postDates: [],
+                avgEngagement: 0,
+                engagementTrend: []
+            },
+            trustScore: 0,
+            lastUpdated: null
+        };
     }
-
-    return {
-        winners: [],           // Top performing videos
-        patterns: {
-            hooks: {},         // Hook style performance
-            niches: {},        // Niche performance
-            postTimes: {},     // Best times to post
-            durations: {},     // Video length performance
-            formats: {},       // Reel vs Story vs Post
-            tones: {}          // Voice/content tone performance
-        },
-        consistency: {
-            totalPosts: 0,
-            postDates: [],
-            avgEngagement: 0,
-            engagementTrend: []  // Track engagement over time
-        },
-        trustScore: 0,         // 0-100 based on consistency
-        lastUpdated: null
-    };
 };
 
 /**
- * Save patterns to file
+ * Save patterns for user
  */
-const savePatterns = (patterns) => {
+const savePatterns = async (userId, patterns) => {
     try {
-        const dir = path.dirname(PATTERNS_FILE);
-        if (!fs.existsSync(dir)) {
-            fs.mkdirSync(dir, { recursive: true });
-        }
-        fs.writeFileSync(PATTERNS_FILE, JSON.stringify(patterns, null, 2));
+        patterns.lastUpdated = new Date().toISOString();
+        await dataService.patterns.saveWinningPatterns(userId, 'facebook', patterns);
     } catch (err) {
-        console.error('Error saving FB patterns:', err);
+        console.error('Error saving Facebook patterns:', err);
     }
 };
 
@@ -161,7 +179,8 @@ const extractPatterns = (video) => {
  * Rewards consistency and growing engagement over time
  *
  * Formula:
- * - Base score from views
+ * - Base score from ENGAGEMENT (weighted: shares > comments > reactions)
+ * - Falls back to views if available
  * - Consistency multiplier (regular posting = trust)
  * - Engagement trend bonus (growing = algorithm favor)
  * - Share rate bonus (shares = endorsement)
@@ -175,29 +194,67 @@ export const calculateRepeatedGameScore = (video, patterns = null) => {
     // Load patterns if not provided
     const allPatterns = patterns || loadWinningPatterns();
 
-    // 1. Base score from views (-2 to 2)
+    // Calculate weighted engagement score (primary metric since FB often doesn't return views)
+    const weightedEngagement =
+        (shares * FACEBOOK_THRESHOLDS.SHARE_WEIGHT) +
+        (comments * FACEBOOK_THRESHOLDS.COMMENT_WEIGHT) +
+        (reactions * FACEBOOK_THRESHOLDS.REACTION_WEIGHT);
+
+    // 1. Base score - USE ENGAGEMENT as primary, views as secondary
     let baseScore;
-    if (views >= FACEBOOK_THRESHOLDS.VIRAL) {
-        baseScore = 2;
-    } else if (views >= FACEBOOK_THRESHOLDS.GOOD) {
-        baseScore = 1;
-    } else if (views >= FACEBOOK_THRESHOLDS.AVERAGE) {
-        baseScore = 0;
-    } else if (views >= FACEBOOK_THRESHOLDS.POOR) {
-        baseScore = -1;
+    let scoringMethod = 'engagement';
+
+    if (views > 0) {
+        // If views are available, use view-based scoring
+        scoringMethod = 'views';
+        if (views >= FACEBOOK_THRESHOLDS.VIRAL) {
+            baseScore = 2;
+        } else if (views >= FACEBOOK_THRESHOLDS.GOOD) {
+            baseScore = 1;
+        } else if (views >= FACEBOOK_THRESHOLDS.AVERAGE) {
+            baseScore = 0;
+        } else if (views >= FACEBOOK_THRESHOLDS.POOR) {
+            baseScore = -1;
+        } else {
+            baseScore = -2;
+        }
     } else {
-        baseScore = -2;
+        // Views not available - use ENGAGEMENT-based scoring (Facebook Reels limitation)
+        if (weightedEngagement >= FACEBOOK_THRESHOLDS.ENGAGEMENT_VIRAL) {
+            baseScore = 2;
+        } else if (weightedEngagement >= FACEBOOK_THRESHOLDS.ENGAGEMENT_GOOD) {
+            baseScore = 1;
+        } else if (weightedEngagement >= FACEBOOK_THRESHOLDS.ENGAGEMENT_AVERAGE) {
+            baseScore = 0;
+        } else if (weightedEngagement >= FACEBOOK_THRESHOLDS.ENGAGEMENT_POOR) {
+            baseScore = -1;
+        } else {
+            baseScore = -2;
+        }
     }
 
-    // 2. Share rate bonus (Facebook gold - shares = trust)
-    const shareRate = views > 0 ? shares / views : 0;
-    const shareBonus = shareRate >= FACEBOOK_THRESHOLDS.SHARE_RATE_TARGET ? 0.5 :
-                       shareRate >= FACEBOOK_THRESHOLDS.SHARE_RATE_TARGET / 2 ? 0.25 : 0;
+    // 2. Share bonus (Facebook gold - shares = trust)
+    // When no views, just count raw shares
+    let shareBonus = 0;
+    if (views > 0) {
+        const shareRate = shares / views;
+        shareBonus = shareRate >= FACEBOOK_THRESHOLDS.SHARE_RATE_TARGET ? 0.5 :
+                     shareRate >= FACEBOOK_THRESHOLDS.SHARE_RATE_TARGET / 2 ? 0.25 : 0;
+    } else {
+        // Raw share count bonus (without view context)
+        shareBonus = shares >= 10 ? 0.5 : shares >= 5 ? 0.25 : shares >= 2 ? 0.1 : 0;
+    }
 
-    // 3. Comment rate bonus (deeper engagement)
-    const commentRate = views > 0 ? comments / views : 0;
-    const commentBonus = commentRate >= FACEBOOK_THRESHOLDS.COMMENT_RATE_TARGET ? 0.3 :
-                         commentRate >= FACEBOOK_THRESHOLDS.COMMENT_RATE_TARGET / 2 ? 0.15 : 0;
+    // 3. Comment bonus (deeper engagement)
+    let commentBonus = 0;
+    if (views > 0) {
+        const commentRate = comments / views;
+        commentBonus = commentRate >= FACEBOOK_THRESHOLDS.COMMENT_RATE_TARGET ? 0.3 :
+                       commentRate >= FACEBOOK_THRESHOLDS.COMMENT_RATE_TARGET / 2 ? 0.15 : 0;
+    } else {
+        // Raw comment count bonus
+        commentBonus = comments >= 10 ? 0.3 : comments >= 5 ? 0.15 : comments >= 2 ? 0.05 : 0;
+    }
 
     // 4. Consistency multiplier (from trust score)
     const trustMultiplier = 1 + (allPatterns.trustScore / 200); // Up to 1.5x
@@ -232,8 +289,10 @@ export const calculateRepeatedGameScore = (video, patterns = null) => {
             shares,
             comments,
             reactions,
-            shareRate: Math.round(shareRate * 10000) / 100,
-            commentRate: Math.round(commentRate * 10000) / 100,
+            weightedEngagement: Math.round(weightedEngagement),
+            scoringMethod,
+            shareBonus: Math.round(shareBonus * 100) / 100,
+            commentBonus: Math.round(commentBonus * 100) / 100,
             trustMultiplier: Math.round(trustMultiplier * 100) / 100,
             trendBonus,
             baseScore
@@ -308,8 +367,8 @@ export const calculateTrustScore = (patterns) => {
 /**
  * Update winning patterns with new video data
  */
-export const updateWinningPatterns = (video, scoreResult) => {
-    const patterns = loadWinningPatterns();
+export const updateWinningPatterns = async (userId, video, scoreResult) => {
+    const patterns = await loadWinningPatterns(userId);
     const extracted = extractPatterns(video);
 
     // Update consistency tracking
@@ -367,8 +426,7 @@ export const updateWinningPatterns = (video, scoreResult) => {
         patterns.winners = patterns.winners.slice(0, 10);
     }
 
-    patterns.lastUpdated = new Date().toISOString();
-    savePatterns(patterns);
+    await savePatterns(userId, patterns);
 
     return patterns;
 };
@@ -377,8 +435,8 @@ export const updateWinningPatterns = (video, scoreResult) => {
  * Generate few-shot prompt for Facebook content
  * Emphasizes consistency and trust-building content
  */
-export const generateFewShotPrompt = () => {
-    const patterns = loadWinningPatterns();
+export const generateFewShotPrompt = async (userId) => {
+    const patterns = await loadWinningPatterns(userId);
 
     let prompt = `## Facebook Content Strategy (Repeated Game - Build Trust)\n\n`;
     prompt += `**Trust Score:** ${patterns.trustScore}/100\n`;
@@ -400,7 +458,7 @@ export const generateFewShotPrompt = () => {
             prompt += `**${i + 1}. ${winner.title}** (Score: ${winner.score})\n`;
             prompt += `   - Hook: ${winner.patterns.hookStyle}\n`;
             prompt += `   - Niche: ${winner.patterns.niche}\n`;
-            prompt += `   - Shares: ${winner.metrics.shares} (${winner.metrics.shareRate}%)\n\n`;
+            prompt += `   - Engagement: ${winner.metrics.weightedEngagement || 'N/A'} (Shares: ${winner.metrics.shares}, Comments: ${winner.metrics.comments})\n\n`;
         });
     }
 
@@ -475,34 +533,113 @@ export const fetchVideoStats = async (accessToken, videoId) => {
 };
 
 /**
- * Fetch all recent videos for analysis
+ * Fetch video insights (views) from Facebook Insights API
  */
-export const fetchRecentVideos = async (accessToken, pageId, limit = 25) => {
+const fetchVideoInsights = async (accessToken, videoId) => {
     try {
+        // Try to get video insights (views)
         const response = await fetch(
-            `https://graph.facebook.com/v18.0/${pageId}/videos?fields=id,title,description,views,shares,comments.summary(true),reactions.summary(true),created_time&limit=${limit}&access_token=${accessToken}`
+            `https://graph.facebook.com/v18.0/${videoId}/video_insights?metric=total_video_views,total_video_impressions&access_token=${accessToken}`
         );
 
-        if (!response.ok) {
-            throw new Error(`Facebook API error: ${response.status}`);
+        if (response.ok) {
+            const data = await response.json();
+            const views = data.data?.find(m => m.name === 'total_video_views')?.values?.[0]?.value || 0;
+            const impressions = data.data?.find(m => m.name === 'total_video_impressions')?.values?.[0]?.value || 0;
+            return { views, impressions };
         }
-
-        const data = await response.json();
-
-        return (data.data || []).map(video => ({
-            id: video.id,
-            title: video.title || video.description?.slice(0, 50),
-            description: video.description,
-            views: video.views || 0,
-            shares: video.shares?.count || 0,
-            comments: video.comments?.summary?.total_count || 0,
-            reactions: video.reactions?.summary?.total_count || 0,
-            publishedAt: video.created_time
-        }));
     } catch (err) {
-        console.error('Error fetching FB videos:', err);
-        throw err;
+        // Insights API requires read_insights permission
     }
+    return { views: 0, impressions: 0 };
+};
+
+/**
+ * Fetch all recent videos for analysis
+ * Tries multiple endpoints as Facebook has different APIs for different content types
+ */
+export const fetchRecentVideos = async (accessToken, pageId, limit = 25) => {
+    const videos = [];
+
+    // Try 1: Regular videos endpoint with insights
+    try {
+        const response = await fetch(
+            `https://graph.facebook.com/v18.0/${pageId}/videos?fields=id,title,description,length,created_time,comments.summary(true),reactions.summary(true)&limit=${limit}&access_token=${accessToken}`
+        );
+
+        if (response.ok) {
+            const data = await response.json();
+            if (data.data && data.data.length > 0) {
+                for (const video of data.data) {
+                    // Try to get insights for this video
+                    const insights = await fetchVideoInsights(accessToken, video.id);
+
+                    videos.push({
+                        id: video.id,
+                        title: video.title || video.description?.slice(0, 50) || 'Untitled Video',
+                        description: video.description,
+                        views: insights.views,
+                        impressions: insights.impressions,
+                        shares: 0,
+                        comments: video.comments?.summary?.total_count || 0,
+                        reactions: video.reactions?.summary?.total_count || 0,
+                        duration: video.length || 0,
+                        publishedAt: video.created_time
+                    });
+                }
+            }
+        }
+    } catch (err) {
+        console.log('Videos endpoint not available:', err.message);
+    }
+
+    // Try 2: Published posts (may include video reels)
+    try {
+        const response = await fetch(
+            `https://graph.facebook.com/v18.0/${pageId}/published_posts?fields=id,message,created_time,shares,comments.summary(true),reactions.summary(true),attachments{type,media_type,target{id}}&limit=${limit}&access_token=${accessToken}`
+        );
+
+        if (response.ok) {
+            const data = await response.json();
+            if (data.data && data.data.length > 0) {
+                for (const post of data.data) {
+                    // Check if we already have this ID
+                    if (videos.find(v => v.id === post.id)) continue;
+
+                    // Try to get video ID from attachment
+                    const videoAttachment = post.attachments?.data?.find(a =>
+                        a.type === 'video_inline' || a.media_type === 'video'
+                    );
+                    const videoId = videoAttachment?.target?.id;
+
+                    // Get insights if we have a video ID
+                    let insights = { views: 0, impressions: 0 };
+                    if (videoId) {
+                        insights = await fetchVideoInsights(accessToken, videoId);
+                    }
+
+                    videos.push({
+                        id: post.id,
+                        videoId: videoId,
+                        title: post.message?.slice(0, 50) || 'Untitled Post',
+                        description: post.message,
+                        views: insights.views,
+                        impressions: insights.impressions,
+                        shares: post.shares?.count || 0,
+                        comments: post.comments?.summary?.total_count || 0,
+                        reactions: post.reactions?.summary?.total_count || 0,
+                        publishedAt: post.created_time
+                    });
+                }
+            }
+        }
+    } catch (err) {
+        console.log('Published posts endpoint not available:', err.message);
+    }
+
+    // If no videos found, return empty array (not an error)
+    console.log(`📊 Found ${videos.length} Facebook videos/posts to analyze`);
+    return videos;
 };
 
 /**
@@ -521,6 +658,20 @@ export const analyzeChannel = async (accessToken, pageId) => {
             ...video,
             analysis: scoreResult
         });
+    }
+
+    // Handle empty results
+    if (results.length === 0) {
+        return {
+            totalVideos: 0,
+            averageScore: 0,
+            viralCount: 0,
+            goodCount: 0,
+            trustScore: patterns.trustScore,
+            videos: [],
+            fewShotPrompt: generateFewShotPrompt(),
+            message: 'No videos found yet. Post some content to start building analytics!'
+        };
     }
 
     // Return summary
@@ -542,7 +693,7 @@ export const analyzeChannel = async (accessToken, pageId) => {
 /**
  * Add video manually (for testing or when API unavailable)
  */
-export const addVideoManually = (videoData) => {
+export const addVideoManually = async (userId, videoData) => {
     const video = {
         id: videoData.id || `fb_manual_${Date.now()}`,
         title: videoData.title,
@@ -557,12 +708,13 @@ export const addVideoManually = (videoData) => {
     };
 
     const scoreResult = calculateRepeatedGameScore(video);
-    updateWinningPatterns(video, scoreResult);
+    await updateWinningPatterns(userId, video, scoreResult);
 
+    const patterns = await loadWinningPatterns(userId);
     return {
         video,
         analysis: scoreResult,
-        trustScore: loadWinningPatterns().trustScore
+        trustScore: patterns.trustScore
     };
 };
 

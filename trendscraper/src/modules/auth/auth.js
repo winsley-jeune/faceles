@@ -1,170 +1,188 @@
-import fs from 'fs';
-import path from 'path';
 import crypto from 'crypto';
 import fetch from 'node-fetch';
+import jwt from 'jsonwebtoken';
+import { addToBlacklist } from './tokenBlacklist.js';
+import { log as logAuthEvent, EVENTS as AUTH_EVENTS } from './auditLogger.js';
+import userRepository from '../../database/repositories/userRepository.js';
+import subscriptionRepository from '../../database/repositories/subscriptionRepository.js';
+import oauthStateRepository from '../../database/repositories/oauthStateRepository.js';
+import { isDatabaseAvailable } from '../../database/db.js';
+import { logger } from '../../utils/index.js';
 
-const USERS_PATH = '/app/data/users.json';
-const SESSIONS_PATH = '/app/data/sessions.json';
-
-// JWT secret - in production, use a proper secret management
-const JWT_SECRET = process.env.JWT_SECRET || crypto.randomBytes(32).toString('hex');
+// ============================================
+// JWT CONFIGURATION
+// ============================================
 
 /**
- * Load users from file
+ * Get JWT secret from environment
+ * MUST be set in production for security
  */
-const loadUsers = () => {
-    if (fs.existsSync(USERS_PATH)) {
-        return JSON.parse(fs.readFileSync(USERS_PATH, 'utf8'));
+const getJwtSecret = () => {
+    const secret = process.env.JWT_SECRET;
+
+    if (!secret) {
+        throw new Error('JWT_SECRET environment variable must be set');
     }
-    return [];
-};
 
-/**
- * Save users to file
- */
-const saveUsers = (users) => {
-    const dir = path.dirname(USERS_PATH);
-    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-    fs.writeFileSync(USERS_PATH, JSON.stringify(users, null, 2));
-};
-
-/**
- * Load sessions from file
- */
-const loadSessions = () => {
-    if (fs.existsSync(SESSIONS_PATH)) {
-        return JSON.parse(fs.readFileSync(SESSIONS_PATH, 'utf8'));
+    if (secret.length < 32) {
+        throw new Error('JWT_SECRET must be at least 32 characters for security');
     }
-    return {};
+
+    return secret;
 };
 
+const JWT_SECRET = getJwtSecret();
+const JWT_ACCESS_EXPIRY = '7d'; // 7 days
+const JWT_REFRESH_EXPIRY = '30d'; // 30 days
+
 /**
- * Save sessions to file
+ * Generate JWT access token
+ * @param {string} userId - User ID
+ * @returns {string} JWT token
  */
-const saveSessions = (sessions) => {
-    const dir = path.dirname(SESSIONS_PATH);
-    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-    fs.writeFileSync(SESSIONS_PATH, JSON.stringify(sessions, null, 2));
+export const generateToken = (userId) => {
+    return jwt.sign(
+        { userId, type: 'access' },
+        JWT_SECRET,
+        { expiresIn: JWT_ACCESS_EXPIRY, issuer: 'viral-shorts-api' }
+    );
 };
 
 /**
- * Generate a simple JWT-like token
+ * Generate JWT refresh token
+ * @param {string} userId - User ID
+ * @returns {string} JWT refresh token
  */
-const generateToken = (userId) => {
-    const payload = {
-        userId,
-        iat: Date.now(),
-        exp: Date.now() + (7 * 24 * 60 * 60 * 1000) // 7 days
-    };
-    const payloadBase64 = Buffer.from(JSON.stringify(payload)).toString('base64url');
-    const signature = crypto
-        .createHmac('sha256', JWT_SECRET)
-        .update(payloadBase64)
-        .digest('base64url');
-    return `${payloadBase64}.${signature}`;
+export const generateRefreshToken = (userId) => {
+    return jwt.sign(
+        { userId, type: 'refresh' },
+        JWT_SECRET,
+        { expiresIn: JWT_REFRESH_EXPIRY, issuer: 'viral-shorts-api' }
+    );
 };
 
 /**
- * Verify token and return user ID
+ * Verify JWT token and return user ID
+ * @param {string} token - JWT token
+ * @returns {string|null} User ID if valid, null if invalid
  */
 export const verifyToken = (token) => {
     try {
-        const [payloadBase64, signature] = token.split('.');
-        const expectedSignature = crypto
-            .createHmac('sha256', JWT_SECRET)
-            .update(payloadBase64)
-            .digest('base64url');
+        const decoded = jwt.verify(token, JWT_SECRET, { issuer: 'viral-shorts-api' });
 
-        if (signature !== expectedSignature) {
+        if (decoded.type !== 'access') {
+            logger.warn('Token type mismatch - expected access token');
             return null;
         }
 
-        const payload = JSON.parse(Buffer.from(payloadBase64, 'base64url').toString());
-
-        if (payload.exp < Date.now()) {
-            return null;
+        return decoded.userId;
+    } catch (error) {
+        if (error.name === 'TokenExpiredError') {
+            logger.debug('Token expired');
+        } else if (error.name === 'JsonWebTokenError') {
+            logger.warn('Invalid token signature');
+        } else {
+            logger.error(`Token verification failed: ${error.message}`);
         }
-
-        return payload.userId;
-    } catch {
         return null;
     }
 };
 
 /**
- * Find or create user from OAuth data
+ * Verify refresh token and return user ID
+ * @param {string} token - JWT refresh token
+ * @returns {string|null} User ID if valid, null if invalid
  */
-const findOrCreateUser = (provider, profile) => {
-    const users = loadUsers();
+export const verifyRefreshToken = (token) => {
+    try {
+        const decoded = jwt.verify(token, JWT_SECRET, { issuer: 'viral-shorts-api' });
 
-    // Find existing user by provider ID
-    let user = users.find(u =>
-        u.providers?.[provider]?.id === profile.id
-    );
-
-    // Or find by email
-    if (!user && profile.email) {
-        user = users.find(u => u.email === profile.email);
-    }
-
-    if (user) {
-        // Update provider info
-        user.providers = user.providers || {};
-        user.providers[provider] = {
-            id: profile.id,
-            accessToken: profile.accessToken,
-            refreshToken: profile.refreshToken,
-        };
-        user.lastLogin = new Date().toISOString();
-        if (profile.avatar && !user.avatar) {
-            user.avatar = profile.avatar;
+        if (decoded.type !== 'refresh') {
+            logger.warn('Token type mismatch - expected refresh token');
+            return null;
         }
-        saveUsers(users);
-        return user;
+
+        return decoded.userId;
+    } catch (error) {
+        logger.error(`Refresh token verification failed: ${error.message}`);
+        return null;
+    }
+};
+
+// ============================================
+// USER AUTHENTICATION
+// ============================================
+
+/**
+ * Find or create user from OAuth data using PostgreSQL database
+ */
+const findOrCreateUserInDatabase = async (provider, profile) => {
+    // Ensure database is available
+    if (!isDatabaseAvailable()) {
+        logger.error('Database not available - cannot authenticate user');
+        throw new Error('Database connection required for authentication');
     }
 
-    // Create new user
-    const newUser = {
-        id: crypto.randomUUID(),
-        email: profile.email,
-        name: profile.name,
-        avatar: profile.avatar,
-        providers: {
-            [provider]: {
-                id: profile.id,
-                accessToken: profile.accessToken,
-                refreshToken: profile.refreshToken,
-            }
-        },
-        createdAt: new Date().toISOString(),
-        lastLogin: new Date().toISOString(),
-    };
+    try {
+        // Use userRepository to find or create user from OAuth
+        const user = await userRepository.findOrCreateFromOAuth(provider, profile);
 
-    users.push(newUser);
-    saveUsers(users);
-    return newUser;
+        logger.info(`User authenticated: ${user.email} via ${provider}`);
+
+        // Check if user has a subscription
+        const subscription = await subscriptionRepository.findByUserId(user.id);
+
+        // If no subscription, create a FREE plan
+        if (!subscription) {
+            await subscriptionRepository.upsert(user.id, {
+                planId: 'free',
+                status: 'active',
+                demoMode: false
+            });
+            logger.info(`Created free subscription for new user: ${user.email}`);
+        }
+
+        return user;
+    } catch (error) {
+        logger.error(`Failed to authenticate user via ${provider}: ${error.message}`);
+        throw error;
+    }
 };
 
 /**
- * Get user by ID
+ * Get user by ID from database
  */
-export const getUserById = (userId) => {
-    const users = loadUsers();
-    return users.find(u => u.id === userId);
+export const getUserById = async (userId) => {
+    if (!isDatabaseAvailable()) {
+        logger.error('Database not available - cannot get user');
+        return null;
+    }
+
+    try {
+        return await userRepository.findById(userId);
+    } catch (error) {
+        logger.error(`Failed to get user by ID: ${error.message}`);
+        return null;
+    }
 };
 
-// ============ GOOGLE OAuth ============
-// Use YOUTUBE credentials for Google login if GOOGLE_ not set (same Google project)
+// ============================================
+// GOOGLE OAUTH
+// ============================================
+
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || process.env.YOUTUBE_CLIENT_ID;
 const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET || process.env.YOUTUBE_CLIENT_SECRET;
 const GOOGLE_REDIRECT_URI = process.env.GOOGLE_REDIRECT_URI || 'http://localhost:5174/auth/callback/google';
 
-export const getGoogleAuthUrl = () => {
+export const getGoogleAuthUrl = async () => {
     const scope = [
         'openid',
         'email',
         'profile'
     ].join(' ');
+
+    const state = crypto.randomBytes(32).toString('hex');
+    await oauthStateRepository.store(state, 'google');
 
     const params = new URLSearchParams({
         client_id: GOOGLE_CLIENT_ID,
@@ -173,12 +191,23 @@ export const getGoogleAuthUrl = () => {
         scope,
         access_type: 'offline',
         prompt: 'consent',
+        state,
     });
 
     return `https://accounts.google.com/o/oauth2/v2/auth?${params}`;
 };
 
-export const handleGoogleCallback = async (code) => {
+export const handleGoogleCallback = async (code, state) => {
+    // Validate state for CSRF protection
+    if (state) {
+        const stateData = await oauthStateRepository.consume(state);
+        if (!stateData || stateData.provider !== 'google') {
+            throw new Error('Invalid OAuth state - possible CSRF attack');
+        }
+    } else {
+        throw new Error('Missing OAuth state parameter');
+    }
+
     // Exchange code for tokens
     const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
         method: 'POST',
@@ -191,6 +220,11 @@ export const handleGoogleCallback = async (code) => {
             redirect_uri: GOOGLE_REDIRECT_URI,
         }),
     });
+
+    if (!tokenRes.ok) {
+        const errorData = await tokenRes.json().catch(() => ({}));
+        throw new Error(errorData.error_description || errorData.error || 'Google auth failed');
+    }
 
     const tokens = await tokenRes.json();
 
@@ -205,7 +239,7 @@ export const handleGoogleCallback = async (code) => {
 
     const profile = await userRes.json();
 
-    const user = findOrCreateUser('google', {
+    const user = await findOrCreateUserInDatabase('google', {
         id: profile.id,
         email: profile.email,
         name: profile.name,
@@ -214,10 +248,14 @@ export const handleGoogleCallback = async (code) => {
         refreshToken: tokens.refresh_token,
     });
 
-    const token = generateToken(user.id);
+    const accessToken = generateToken(user.id);
+    const refreshToken = generateRefreshToken(user.id);
+
+    logAuthEvent(AUTH_EVENTS.LOGIN_SUCCESS, { userId: user.id, provider: 'google' });
 
     return {
-        token,
+        token: accessToken,
+        refreshToken,
         user: {
             id: user.id,
             email: user.email,
@@ -227,37 +265,62 @@ export const handleGoogleCallback = async (code) => {
     };
 };
 
-// ============ FACEBOOK OAuth ============
+// ============================================
+// FACEBOOK OAUTH
+// ============================================
+
 const FACEBOOK_APP_ID = process.env.FACEBOOK_APP_ID;
 const FACEBOOK_APP_SECRET = process.env.FACEBOOK_APP_SECRET;
 const FACEBOOK_REDIRECT_URI = process.env.FACEBOOK_REDIRECT_URI || 'http://localhost:5174/auth/callback/facebook';
 
-export const getFacebookAuthUrl = () => {
+export const getFacebookAuthUrl = async () => {
     const scope = 'email,public_profile';
+    const state = crypto.randomBytes(32).toString('hex');
+    await oauthStateRepository.store(state, 'facebook');
 
     const params = new URLSearchParams({
         client_id: FACEBOOK_APP_ID,
         redirect_uri: FACEBOOK_REDIRECT_URI,
         scope,
         response_type: 'code',
+        state,
     });
 
     return `https://www.facebook.com/v18.0/dialog/oauth?${params}`;
 };
 
-export const handleFacebookCallback = async (code) => {
+export const handleFacebookCallback = async (code, state) => {
+    // Validate state for CSRF protection
+    if (state) {
+        const stateData = await oauthStateRepository.consume(state);
+        if (!stateData || stateData.provider !== 'facebook') {
+            throw new Error('Invalid OAuth state - possible CSRF attack');
+        }
+    } else {
+        throw new Error('Missing OAuth state parameter');
+    }
+
     // Exchange code for token
-    const tokenRes = await fetch(`https://graph.facebook.com/v18.0/oauth/access_token?` +
-        `client_id=${FACEBOOK_APP_ID}&` +
-        `redirect_uri=${encodeURIComponent(FACEBOOK_REDIRECT_URI)}&` +
-        `client_secret=${FACEBOOK_APP_SECRET}&` +
-        `code=${code}`
-    );
+    const tokenRes = await fetch('https://graph.facebook.com/v18.0/oauth/access_token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({
+            client_id: FACEBOOK_APP_ID,
+            client_secret: FACEBOOK_APP_SECRET,
+            code,
+            redirect_uri: FACEBOOK_REDIRECT_URI,
+        }),
+    });
+
+    if (!tokenRes.ok) {
+        const errorData = await tokenRes.json().catch(() => ({}));
+        throw new Error(errorData.error?.message || errorData.error_description || 'Facebook auth failed');
+    }
 
     const tokens = await tokenRes.json();
 
     if (tokens.error) {
-        throw new Error(tokens.error.message || 'Facebook auth failed');
+        throw new Error(tokens.error.message || tokens.error_description || 'Facebook auth failed');
     }
 
     // Get user info
@@ -267,7 +330,7 @@ export const handleFacebookCallback = async (code) => {
 
     const profile = await userRes.json();
 
-    const user = findOrCreateUser('facebook', {
+    const user = await findOrCreateUserInDatabase('facebook', {
         id: profile.id,
         email: profile.email,
         name: profile.name,
@@ -275,10 +338,14 @@ export const handleFacebookCallback = async (code) => {
         accessToken: tokens.access_token,
     });
 
-    const token = generateToken(user.id);
+    const accessToken = generateToken(user.id);
+    const refreshToken = generateRefreshToken(user.id);
+
+    logAuthEvent(AUTH_EVENTS.LOGIN_SUCCESS, { userId: user.id, provider: 'facebook' });
 
     return {
-        token,
+        token: accessToken,
+        refreshToken,
         user: {
             id: user.id,
             email: user.email,
@@ -288,15 +355,15 @@ export const handleFacebookCallback = async (code) => {
     };
 };
 
-// ============ TIKTOK OAuth ============
+// ============================================
+// TIKTOK OAUTH
+// ============================================
+
 const TIKTOK_CLIENT_KEY = process.env.TIKTOK_CLIENT_KEY;
 const TIKTOK_CLIENT_SECRET = process.env.TIKTOK_CLIENT_SECRET;
 const TIKTOK_REDIRECT_URI = process.env.TIKTOK_LOGIN_REDIRECT_URI || 'http://localhost:5174/auth/callback/tiktok';
 
-// Store code verifier for PKCE
-let tiktokCodeVerifier = null;
-
-export const getTikTokAuthUrl = () => {
+export const getTikTokAuthUrl = async () => {
     // Generate PKCE
     const allowedChars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~';
     let codeVerifier = '';
@@ -304,15 +371,17 @@ export const getTikTokAuthUrl = () => {
     for (let i = 0; i < 64; i++) {
         codeVerifier += allowedChars[randomBytes[i] % allowedChars.length];
     }
-    tiktokCodeVerifier = codeVerifier;
 
     const codeChallenge = crypto
         .createHash('sha256')
         .update(codeVerifier)
-        .digest('hex');
+        .digest('base64url');
 
     const scope = 'user.info.basic';
-    const state = crypto.randomBytes(16).toString('hex');
+    const state = crypto.randomBytes(32).toString('hex');
+
+    // Store state with code verifier for PKCE
+    await oauthStateRepository.store(state, 'tiktok', { codeVerifier });
 
     const authUrl = `https://www.tiktok.com/v2/auth/authorize/` +
         `?client_key=${TIKTOK_CLIENT_KEY}` +
@@ -326,9 +395,22 @@ export const getTikTokAuthUrl = () => {
     return authUrl;
 };
 
-export const handleTikTokCallback = async (code) => {
-    if (!tiktokCodeVerifier) {
-        throw new Error('No code verifier. Please restart login.');
+export const handleTikTokCallback = async (code, state) => {
+    // Validate state and get codeVerifier for PKCE
+    let codeVerifier = null;
+
+    if (state) {
+        const stateData = await oauthStateRepository.consume(state);
+        if (!stateData || stateData.provider !== 'tiktok') {
+            throw new Error('Invalid OAuth state - possible CSRF attack');
+        }
+        codeVerifier = stateData.codeVerifier;
+    } else {
+        throw new Error('Missing OAuth state parameter');
+    }
+
+    if (!codeVerifier) {
+        throw new Error('No code verifier found. Please restart TikTok login.');
     }
 
     // Exchange code for token
@@ -341,11 +423,15 @@ export const handleTikTokCallback = async (code) => {
             code,
             grant_type: 'authorization_code',
             redirect_uri: TIKTOK_REDIRECT_URI,
-            code_verifier: tiktokCodeVerifier,
+            code_verifier: codeVerifier,
         }),
     });
 
-    tiktokCodeVerifier = null;
+    if (!tokenRes.ok) {
+        const errorData = await tokenRes.json().catch(() => ({}));
+        throw new Error(errorData.error_description || errorData.error || 'TikTok auth failed');
+    }
+
     const tokens = await tokenRes.json();
 
     if (tokens.error) {
@@ -363,7 +449,7 @@ export const handleTikTokCallback = async (code) => {
     const userData = await userRes.json();
     const profile = userData.data?.user || {};
 
-    const user = findOrCreateUser('tiktok', {
+    const user = await findOrCreateUserInDatabase('tiktok', {
         id: tokens.open_id,
         email: null, // TikTok doesn't provide email in basic scope
         name: profile.display_name || profile.username,
@@ -372,10 +458,14 @@ export const handleTikTokCallback = async (code) => {
         refreshToken: tokens.refresh_token,
     });
 
-    const token = generateToken(user.id);
+    const accessToken = generateToken(user.id);
+    const refreshToken = generateRefreshToken(user.id);
+
+    logAuthEvent(AUTH_EVENTS.LOGIN_SUCCESS, { userId: user.id, provider: 'tiktok' });
 
     return {
-        token,
+        token: accessToken,
+        refreshToken,
         user: {
             id: user.id,
             email: user.email,
@@ -385,8 +475,69 @@ export const handleTikTokCallback = async (code) => {
     };
 };
 
+// ============================================
+// TOKEN MANAGEMENT
+// ============================================
+
+/**
+ * Refresh access token using refresh token
+ * @param {string} refreshToken - JWT refresh token
+ * @returns {object} New access token and refresh token
+ */
+export const refreshAccessToken = async (refreshToken) => {
+    const userId = verifyRefreshToken(refreshToken);
+
+    if (!userId) {
+        throw new Error('Invalid refresh token');
+    }
+
+    const user = await getUserById(userId);
+
+    if (!user || !user.is_active) {
+        throw new Error('User not found or inactive');
+    }
+
+    const newAccessToken = generateToken(userId);
+    const newRefreshToken = generateRefreshToken(userId);
+
+    logAuthEvent(AUTH_EVENTS.TOKEN_REFRESHED, { userId });
+
+    return {
+        token: newAccessToken,
+        refreshToken: newRefreshToken,
+    };
+};
+
+/**
+ * Logout user - blacklist their token
+ * @param {string} token - JWT token to invalidate
+ * @param {string} userId - User ID (optional, for logging)
+ */
+export const logout = (token, userId = null) => {
+    if (token) {
+        addToBlacklist(token, 'logout');
+        logAuthEvent(AUTH_EVENTS.LOGOUT, { userId });
+    }
+    return { success: true, message: 'Logged out successfully' };
+};
+
+/**
+ * Revoke a token (for security events)
+ * @param {string} token - JWT token to revoke
+ * @param {string} reason - Reason for revocation
+ */
+export const revokeToken = (token, reason = 'revoked') => {
+    if (token) {
+        addToBlacklist(token, reason);
+        logAuthEvent(AUTH_EVENTS.TOKEN_REVOKED, { reason });
+    }
+};
+
 export default {
+    generateToken,
+    generateRefreshToken,
     verifyToken,
+    verifyRefreshToken,
     getUserById,
     getGoogleAuthUrl,
     handleGoogleCallback,
@@ -394,4 +545,7 @@ export default {
     handleFacebookCallback,
     getTikTokAuthUrl,
     handleTikTokCallback,
+    refreshAccessToken,
+    logout,
+    revokeToken,
 };

@@ -12,14 +12,13 @@ export const useAuth = () => {
   return context;
 };
 
-// DEV MODE: Set to true to bypass login for testing
-const DEV_BYPASS_LOGIN = import.meta.env.DEV; // Auto-enabled in development
-
-const DEV_USER = {
-  id: 'dev-user-123',
-  email: 'dev@viralshorts.test',
-  name: 'Dev User',
-  avatar: null,
+/**
+ * Development mode DISABLED
+ * Real authentication is ALWAYS required
+ */
+const isDevModeEnabled = () => {
+  // Dev mode is permanently disabled - real auth required
+  return false;
 };
 
 export const AuthProvider = ({ children }) => {
@@ -31,24 +30,24 @@ export const AuthProvider = ({ children }) => {
   }, []);
 
   const checkAuth = async () => {
-    // DEV BYPASS: Auto-login in development mode
-    if (DEV_BYPASS_LOGIN) {
-      console.log('🔓 DEV MODE: Auto-login enabled');
-      setUser(DEV_USER);
-      localStorage.setItem('onboarding_complete', 'true'); // Skip onboarding too
-      setLoading(false);
-      return;
-    }
-
     try {
       const token = localStorage.getItem('auth_token');
       if (token) {
         const userData = await api.getCurrentUser();
-        setUser(userData);
+        // Backend returns { authenticated: true, user: {...} }
+        if (userData && userData.authenticated && userData.user && userData.user.id) {
+          setUser(userData.user);
+        } else {
+          // Invalid response - clear token
+          console.warn('Auth check returned invalid user data');
+          localStorage.removeItem('auth_token');
+          setUser(null);
+        }
       }
     } catch (err) {
       console.error('Auth check failed:', err);
       localStorage.removeItem('auth_token');
+      setUser(null);
     } finally {
       setLoading(false);
     }
@@ -84,9 +83,9 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  const handleOAuthCallback = async (provider, code) => {
+  const handleOAuthCallback = async (provider, code, state) => {
     try {
-      const result = await api.handleOAuthCallback(provider, code);
+      const result = await api.handleOAuthCallback(provider, code, state);
       if (result.token) {
         localStorage.setItem('auth_token', result.token);
         setUser(result.user);

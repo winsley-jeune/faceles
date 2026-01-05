@@ -1,8 +1,9 @@
 import fs from "fs";
 import path from "path";
-import { exec } from "child_process";
+import { exec, execFile } from "child_process";
 import { v4 as uuidv4 } from "uuid";
 
+// SECURITY: Use exec only for simple commands, execFile for FFmpeg with user paths
 const execPromise = (cmd) => new Promise((resolve, reject) => {
     exec(cmd, { maxBuffer: 50 * 1024 * 1024 }, (error, stdout, stderr) => {
         if (error) {
@@ -13,6 +14,39 @@ const execPromise = (cmd) => new Promise((resolve, reject) => {
         }
     });
 });
+
+// SECURITY: execFile prevents shell injection by passing args as array
+const execFilePromise = (command, args = []) => new Promise((resolve, reject) => {
+    execFile(command, args, { maxBuffer: 50 * 1024 * 1024 }, (error, stdout, stderr) => {
+        if (error) {
+            console.error("FFmpeg stderr:", stderr);
+            reject(new Error(stderr || error.message));
+        } else {
+            resolve(stdout);
+        }
+    });
+});
+
+// SECURITY: Validate file paths are absolute and within allowed directories
+const validateFilePath = (filePath, allowedDirs = ['/tmp', '/app/videos', process.cwd()]) => {
+    const absolutePath = path.resolve(filePath);
+    const isAllowed = allowedDirs.some(dir => absolutePath.startsWith(path.resolve(dir)));
+    if (!isAllowed) {
+        throw new Error(`Path not allowed: ${filePath}`);
+    }
+    return absolutePath;
+};
+
+// SECURITY: Escape special characters in FFmpeg filter strings
+const escapeFFmpegFilterPath = (filePath) => {
+    // FFmpeg filter requires escaping: \ : ' [ ]
+    return filePath
+        .replace(/\\/g, '/')           // Convert Windows paths to forward slashes
+        .replace(/:/g, '\\:')          // Escape colons (except drive letters handled by forward slash)
+        .replace(/'/g, "'\\''")        // Escape single quotes
+        .replace(/\[/g, '\\[')         // Escape brackets
+        .replace(/\]/g, '\\]');
+};
 
 // Animation presets for different scene types
 const ANIMATION_PRESETS = {
@@ -197,13 +231,25 @@ const animateImage = async (imagePath, duration, outputDir, sceneType = 'body', 
 
     const filterChain = filters.join(",");
 
-    const cmd = `ffmpeg -y -loop 1 -i "${imagePath}" \
-        -vf "${filterChain}" \
-        -c:v libx264 -preset fast -crf 18 \
-        -t ${duration} -pix_fmt yuv420p -r ${fps} \
-        "${videoPath}"`;
+    // SECURITY: Validate paths and use execFile with argument array
+    const validatedImagePath = validateFilePath(imagePath);
+    const validatedVideoPath = validateFilePath(videoPath);
 
-    await execPromise(cmd);
+    const args = [
+        '-y',
+        '-loop', '1',
+        '-i', validatedImagePath,
+        '-vf', filterChain,
+        '-c:v', 'libx264',
+        '-preset', 'fast',
+        '-crf', '18',
+        '-t', String(duration),
+        '-pix_fmt', 'yuv420p',
+        '-r', String(fps),
+        validatedVideoPath
+    ];
+
+    await execFilePromise('ffmpeg', args);
     return videoPath;
 };
 
@@ -213,7 +259,11 @@ const animateImage = async (imagePath, duration, outputDir, sceneType = 'body', 
 const generateStyledSubtitles = async (srtPath, assPath, style = 'viral') => {
     const styleConfig = SUBTITLE_STYLES[style] || SUBTITLE_STYLES.viral;
 
-    await execPromise(`ffmpeg -y -i "${srtPath}" "${assPath}"`);
+    // SECURITY: Validate paths and use execFile
+    const validatedSrtPath = validateFilePath(srtPath);
+    const validatedAssPath = validateFilePath(assPath);
+
+    await execFilePromise('ffmpeg', ['-y', '-i', validatedSrtPath, validatedAssPath]);
 
     let assContent = fs.readFileSync(assPath, 'utf8');
 
@@ -280,34 +330,45 @@ const formatSrtTime = (ms) => {
 const mixAudioWithMusic = async (voicePath, musicPath, outputPath, musicVolume = 0.15) => {
     console.log("   🎵 Mixing audio with background music (enhanced)...");
 
-    // Get voice duration
-    const durationCmd = `ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "${voicePath}"`;
+    // SECURITY: Validate all paths
+    const validatedVoicePath = validateFilePath(voicePath);
+    const validatedMusicPath = validateFilePath(musicPath);
+    const validatedOutputPath = validateFilePath(outputPath);
 
+    // Get voice duration using execFile
     try {
-        const duration = await execPromise(durationCmd);
+        const duration = await execFilePromise('ffprobe', [
+            '-v', 'error',
+            '-show_entries', 'format=duration',
+            '-of', 'default=noprint_wrappers=1:nokey=1',
+            validatedVoicePath
+        ]);
         const voiceDuration = parseFloat(duration.trim());
 
-        // Enhanced mix with RADIO-STYLE voice processing:
-        // 1. Aggressive compression on voice to make it POP
-        // 2. High-shelf EQ boost for clarity/presence
-        // 3. Lower music volume and duck harder
-        // 4. Loudness normalization for platform compliance (-14 LUFS - louder)
-        const cmd = `ffmpeg -y -i "${voicePath}" -i "${musicPath}" \
-            -filter_complex "\
-                [0:a]aformat=channel_layouts=stereo,\
-                    highpass=f=80,\
-                    acompressor=threshold=-18dB:ratio=6:attack=3:release=100:makeup=4,\
-                    equalizer=f=3000:t=h:w=2000:g=3,\
-                    equalizer=f=8000:t=h:w=3000:g=2[voice];\
-                [1:a]volume=${musicVolume * 0.7},\
-                    lowpass=f=6000,\
-                    afade=t=in:st=0:d=0.5,\
-                    afade=t=out:st=${voiceDuration - 1.5}:d=1.5[music];\
-                [voice][music]amix=inputs=2:duration=first:dropout_transition=2,\
-                loudnorm=I=-14:TP=-1:LRA=7[out]" \
-            -map "[out]" -c:a aac -b:a 192k "${outputPath}"`;
+        // Enhanced mix with RADIO-STYLE voice processing
+        const filterComplex = `[0:a]aformat=channel_layouts=stereo,` +
+            `highpass=f=80,` +
+            `acompressor=threshold=-18dB:ratio=6:attack=3:release=100:makeup=4,` +
+            `equalizer=f=3000:t=h:w=2000:g=3,` +
+            `equalizer=f=8000:t=h:w=3000:g=2[voice];` +
+            `[1:a]volume=${musicVolume * 0.7},` +
+            `lowpass=f=6000,` +
+            `afade=t=in:st=0:d=0.5,` +
+            `afade=t=out:st=${voiceDuration - 1.5}:d=1.5[music];` +
+            `[voice][music]amix=inputs=2:duration=first:dropout_transition=2,` +
+            `loudnorm=I=-14:TP=-1:LRA=7[out]`;
 
-        await execPromise(cmd);
+        await execFilePromise('ffmpeg', [
+            '-y',
+            '-i', validatedVoicePath,
+            '-i', validatedMusicPath,
+            '-filter_complex', filterComplex,
+            '-map', '[out]',
+            '-c:a', 'aac',
+            '-b:a', '192k',
+            validatedOutputPath
+        ]);
+
         console.log("   ✅ Audio mixed with enhanced processing");
         return outputPath;
     } catch (error) {
@@ -315,10 +376,30 @@ const mixAudioWithMusic = async (voicePath, musicPath, outputPath, musicVolume =
 
         // Fallback to simpler mixing if enhanced fails
         try {
-            const basicCmd = `ffmpeg -y -i "${voicePath}" -i "${musicPath}" \
-                -filter_complex "[0:a]aformat=channel_layouts=stereo[voice];[1:a]volume=${musicVolume},afade=t=out:st=${voiceDuration - 2}:d=2[music];[voice][music]amix=inputs=2:duration=first[out]" \
-                -map "[out]" -c:a aac -b:a 192k "${outputPath}"`;
-            await execPromise(basicCmd);
+            // Need to get duration again for fallback
+            const durationResult = await execFilePromise('ffprobe', [
+                '-v', 'error',
+                '-show_entries', 'format=duration',
+                '-of', 'default=noprint_wrappers=1:nokey=1',
+                validatedVoicePath
+            ]);
+            const voiceDuration = parseFloat(durationResult.trim()) || 30;
+
+            const basicFilter = `[0:a]aformat=channel_layouts=stereo[voice];` +
+                `[1:a]volume=${musicVolume},afade=t=out:st=${voiceDuration - 2}:d=2[music];` +
+                `[voice][music]amix=inputs=2:duration=first[out]`;
+
+            await execFilePromise('ffmpeg', [
+                '-y',
+                '-i', validatedVoicePath,
+                '-i', validatedMusicPath,
+                '-filter_complex', basicFilter,
+                '-map', '[out]',
+                '-c:a', 'aac',
+                '-b:a', '192k',
+                validatedOutputPath
+            ]);
+
             console.log("   ✅ Audio mixed (basic mode)");
             return outputPath;
         } catch {
@@ -387,6 +468,52 @@ const addSoundEffects = async (audioPath, storyboard, effectsDir, outputPath) =>
  * Main render function - assembles all components into final video
  */
 export const renderVideo = async ({ audioBase64, subtitles, visuals, storyboard, musicPath = null, options = {} }) => {
+    // INPUT VALIDATION
+    if (!audioBase64 || typeof audioBase64 !== 'string') {
+        throw new Error('renderVideo: audioBase64 must be a non-empty string');
+    }
+
+    if (!visuals || !Array.isArray(visuals) || visuals.length === 0) {
+        throw new Error('renderVideo: visuals must be a non-empty array');
+    }
+
+    if (!storyboard || !Array.isArray(storyboard) || storyboard.length === 0) {
+        throw new Error('renderVideo: storyboard must be a non-empty array');
+    }
+
+    // Validate array lengths match
+    if (visuals.length !== storyboard.length) {
+        console.warn(`⚠️ renderVideo: Visual/storyboard mismatch (${visuals.length} vs ${storyboard.length}). Using minimum.`);
+    }
+
+    // Validate all visual files exist
+    const missingFiles = visuals.filter(v => !fs.existsSync(v));
+    if (missingFiles.length > 0) {
+        throw new Error(`renderVideo: Missing visual files: ${missingFiles.join(', ')}`);
+    }
+
+    // Validate storyboard scenes have required data
+    for (let i = 0; i < storyboard.length; i++) {
+        const scene = storyboard[i];
+        if (!scene || typeof scene !== 'object') {
+            throw new Error(`renderVideo: Invalid storyboard at index ${i}`);
+        }
+        if (!scene.text || typeof scene.text !== 'string') {
+            console.warn(`⚠️ renderVideo: Scene ${i} missing text, using empty string`);
+            storyboard[i].text = '';
+        }
+    }
+
+    // Validate base64 audio format
+    try {
+        const audioBuffer = Buffer.from(audioBase64, 'base64');
+        if (audioBuffer.length === 0) {
+            throw new Error('renderVideo: audioBase64 decodes to empty buffer');
+        }
+    } catch (e) {
+        throw new Error(`renderVideo: Invalid base64 audio - ${e.message}`);
+    }
+
     const {
         subtitleStyle = 'viral',
         useAnimatedSubtitles = true,
@@ -434,9 +561,14 @@ export const renderVideo = async ({ audioBase64, subtitles, visuals, storyboard,
             videoClips.push(clip);
         }
 
-        // D. Create concat list
+        // D. Create concat list - SECURITY: Escape single quotes in paths
         const listPath = `${tmpDir}/list.txt`;
-        const fileContent = videoClips.map(p => `file '${p}'`).join('\n');
+        const fileContent = videoClips.map(p => {
+            // Validate each clip path and escape single quotes for FFmpeg concat
+            const validatedPath = validateFilePath(p);
+            const escapedPath = validatedPath.replace(/'/g, "'\\''");
+            return `file '${escapedPath}'`;
+        }).join('\n');
         fs.writeFileSync(listPath, fileContent);
         console.log("   📋 Concat list created");
 
@@ -453,16 +585,26 @@ export const renderVideo = async ({ audioBase64, subtitles, visuals, storyboard,
         await generateStyledSubtitles(srtPath, assPath, subtitleStyle);
         console.log("   💬 Subtitles styled");
 
-        // F. Concatenate video clips
+        // F. Concatenate video clips - SECURITY: Use execFile
         const concatPath = `${tmpDir}/concat.mp4`;
-        await execPromise(`ffmpeg -y -f concat -safe 0 -i "${listPath}" -c:v libx264 -preset fast -crf 18 "${concatPath}"`);
+        await execFilePromise('ffmpeg', [
+            '-y',
+            '-f', 'concat',
+            '-safe', '0',
+            '-i', listPath,
+            '-c:v', 'libx264',
+            '-preset', 'fast',
+            '-crf', '18',
+            concatPath
+        ]);
         console.log("   🔗 Clips concatenated");
 
         // G. Build final filter chain
         const finalFilters = [];
 
-        // Subtitles
-        finalFilters.push(`subtitles=${assPath}:fontsdir=/app/fonts`);
+        // Subtitles - SECURITY: Escape the ASS path for FFmpeg filter syntax
+        const escapedAssPath = escapeFFmpegFilterPath(assPath);
+        finalFilters.push(`subtitles=${escapedAssPath}:fontsdir=/app/fonts`);
 
         // Vignette for cinematic look
         if (addVignette) {
@@ -477,18 +619,31 @@ export const renderVideo = async ({ audioBase64, subtitles, visuals, storyboard,
             finalFilters.push(`noise=alls=${grainAmount}:allf=t`);
         }
 
-        // H. Final assembly with audio
+        // H. Final assembly with audio - SECURITY: Use execFile
         const finalPath = `${tmpDir}/final_output.mp4`;
-        const filterString = finalFilters.length > 0 ? `-vf "${finalFilters.join(',')}"` : '';
+        const filterString = finalFilters.join(',');
 
-        await execPromise(
-            `ffmpeg -y -i "${concatPath}" -i "${finalAudioPath}" \
-            ${filterString} \
-            -c:v libx264 -preset fast -crf 18 \
-            -c:a aac -b:a 192k \
-            -shortest \
-            "${finalPath}"`
+        const finalArgs = [
+            '-y',
+            '-i', concatPath,
+            '-i', finalAudioPath
+        ];
+
+        if (filterString) {
+            finalArgs.push('-vf', filterString);
+        }
+
+        finalArgs.push(
+            '-c:v', 'libx264',
+            '-preset', 'fast',
+            '-crf', '18',
+            '-c:a', 'aac',
+            '-b:a', '192k',
+            '-shortest',
+            finalPath
         );
+
+        await execFilePromise('ffmpeg', finalArgs);
 
         console.log("   ✅ Final video rendered!");
 
