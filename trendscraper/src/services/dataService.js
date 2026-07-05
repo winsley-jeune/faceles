@@ -5,6 +5,7 @@
  */
 
 import database, { isDatabaseAvailable } from '../database/index.js';
+import { encryptToken, decryptToken } from '../utils/tokenCrypto.js';
 
 /**
  * Check if database is available
@@ -41,7 +42,12 @@ export const tokenService = {
     async getToken(userId, platform) {
         validateUserId(userId, 'tokenService.getToken');
         ensureDatabase();
-        return database.tokens.findByPlatform(userId, platform);
+        const row = await database.tokens.findByPlatform(userId, platform);
+        if (row) {
+            row.accessToken = decryptToken(row.accessToken);
+            row.refreshToken = decryptToken(row.refreshToken);
+        }
+        return row;
     },
 
     /**
@@ -53,7 +59,17 @@ export const tokenService = {
     async saveToken(userId, platform, tokenData) {
         validateUserId(userId, 'tokenService.saveToken');
         ensureDatabase();
-        return database.tokens.upsert(userId, platform, tokenData);
+        // Encrypt tokens at rest (access/refresh); other fields unchanged.
+        const row = await database.tokens.upsert(userId, platform, {
+            ...tokenData,
+            accessToken: encryptToken(tokenData.accessToken),
+            refreshToken: encryptToken(tokenData.refreshToken)
+        });
+        if (row) {
+            row.accessToken = decryptToken(row.accessToken);
+            row.refreshToken = decryptToken(row.refreshToken);
+        }
+        return row;
     },
 
     /**
