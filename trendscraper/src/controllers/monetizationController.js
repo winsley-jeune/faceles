@@ -33,7 +33,7 @@ const monetizationController = {
      * Get current user's subscription
      */
     getSubscription: async (req, res) => {
-        const userId = req.user?.id || req.query.userId || 'default';
+        const userId = req.user.id;
 
         const subscription = monetization.getUserSubscription(userId);
         const usage = monetization.getUserUsage(userId);
@@ -59,7 +59,7 @@ const monetizationController = {
      * Subscribe to a plan
      */
     subscribe: async (req, res) => {
-        const userId = req.user?.id || req.body.userId || 'default';
+        const userId = req.user.id;
         const { planId, paymentMethodId } = req.body;
 
         if (!planId) {
@@ -79,7 +79,7 @@ const monetizationController = {
      * Cancel subscription
      */
     cancelSubscription: async (req, res) => {
-        const userId = req.user?.id || req.body.userId || 'default';
+        const userId = req.user.id;
 
         try {
             const result = await monetization.cancelSubscription(userId);
@@ -94,7 +94,7 @@ const monetizationController = {
      * Create checkout session for Stripe
      */
     createCheckout: async (req, res) => {
-        const userId = req.user?.id || req.body.userId || 'default';
+        const userId = req.user.id;
         const { planId, successUrl, cancelUrl } = req.body;
 
         if (!planId) {
@@ -116,7 +116,7 @@ const monetizationController = {
      * Create billing portal session
      */
     createBillingPortal: async (req, res) => {
-        const userId = req.user?.id || req.body.userId || 'default';
+        const userId = req.user.id;
         const { returnUrl } = req.body;
 
         const baseUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
@@ -151,7 +151,7 @@ const monetizationController = {
      * Get usage stats
      */
     getUsage: async (req, res) => {
-        const userId = req.user?.id || req.query.userId || 'default';
+        const userId = req.user.id;
 
         const usage = monetization.getUserUsage(userId);
         const limits = monetization.checkUsageLimits(userId);
@@ -167,7 +167,7 @@ const monetizationController = {
      * Check if user can generate video
      */
     checkLimits: async (req, res) => {
-        const userId = req.user?.id || req.query.userId || 'default';
+        const userId = req.user.id;
 
         const result = monetization.checkUsageLimits(userId);
         res.json({ success: true, ...result });
@@ -177,7 +177,7 @@ const monetizationController = {
      * Track video generation (internal use)
      */
     trackVideo: async (req, res) => {
-        const userId = req.user?.id || req.body.userId || 'default';
+        const userId = req.user.id;
         const { videoData } = req.body;
 
         const usage = monetization.trackVideoGeneration(userId, videoData);
@@ -192,7 +192,7 @@ const monetizationController = {
      * Get affiliate account
      */
     getAffiliate: async (req, res) => {
-        const userId = req.user?.id || req.query.userId || 'default';
+        const userId = req.user.id;
 
         const affiliate = monetization.getAffiliate(userId);
 
@@ -216,7 +216,7 @@ const monetizationController = {
      * Create affiliate account
      */
     createAffiliate: async (req, res) => {
-        const userId = req.user?.id || req.body.userId || 'default';
+        const userId = req.user.id;
         const { paypalEmail } = req.body;
 
         const result = monetization.createAffiliate(userId, { paypalEmail });
@@ -236,7 +236,7 @@ const monetizationController = {
      * Update affiliate payout details
      */
     updateAffiliatePaypal: async (req, res) => {
-        const userId = req.user?.id || req.body.userId || 'default';
+        const userId = req.user.id;
         const { paypalEmail } = req.body;
 
         if (!paypalEmail) {
@@ -289,7 +289,7 @@ const monetizationController = {
      * Request payout
      */
     requestPayout: async (req, res) => {
-        const userId = req.user?.id || req.body.userId || 'default';
+        const userId = req.user.id;
         const { amount } = req.body;
 
         if (!amount || amount <= 0) {
@@ -313,7 +313,7 @@ const monetizationController = {
      * Get transaction history
      */
     getTransactions: async (req, res) => {
-        const userId = req.user?.id || req.query.userId || 'default';
+        const userId = req.user.id;
         const limit = parseInt(req.query.limit) || 50;
 
         const transactions = monetization.getTransactionHistory(userId, limit);

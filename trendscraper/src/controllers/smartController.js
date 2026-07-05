@@ -405,7 +405,7 @@ const smartController = {
      */
     createJob: async (req, res) => {
         const { niche = "general", topic = null, platforms = ['youtube'], autoPost = true } = req.body;
-        const userId = req.user?.id || null;
+        const userId = req.user.id;
 
         console.log(`🚀 Creating background video generation job (niche: ${niche}, platforms: ${platforms.join(', ')}, user: ${userId || 'anonymous'})`);
 

@@ -13,7 +13,7 @@ import logger from '../utils/logger.js';
  * POST /jobs
  */
 export const createJob = async (req, res) => {
-    const userId = req.user?.id || null;
+    const userId = req.user.id;
     const { jobType, niche, topic, platforms, autoPost, priority } = req.body;
 
     // Validate required fields
@@ -62,7 +62,7 @@ export const createJob = async (req, res) => {
  */
 export const getJob = async (req, res) => {
     const { id } = req.params;
-    const userId = req.user?.id || null;
+    const userId = req.user.id;
 
     try {
         // Get job (enforces ownership if userId provided)
@@ -173,7 +173,7 @@ export const listJobs = async (req, res) => {
  */
 export const cancelJob = async (req, res) => {
     const { id } = req.params;
-    const userId = req.user?.id || null;
+    const userId = req.user.id;
 
     try {
         // Cancel in job queue service (aborts if running)

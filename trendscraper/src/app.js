@@ -65,8 +65,9 @@ const videoLimiter = rateLimit({
 // MIDDLEWARE CHAIN
 // ===========================================
 
-// CORS - Allow cross-origin requests
-app.use(cors());
+// CORS - restrict to the configured origin allowlist (was wide-open cors()).
+// env.CORS_ORIGINS is an array; credentials enabled for the httpOnly-cookie auth path.
+app.use(cors({ origin: env.CORS_ORIGINS, credentials: true }));
 
 // Apply general rate limiter to all API routes
 app.use('/smart', apiLimiter);
@@ -76,7 +77,8 @@ app.use('/clone', apiLimiter);
 app.use('/virals', apiLimiter);
 app.use('/brand', apiLimiter);
 
-// Apply auth rate limiter to OAuth endpoints
+// Apply auth rate limiter to the login/auth endpoints AND OAuth endpoints
+app.use('/auth', authLimiter);
 app.use('/youtube-api/auth', authLimiter);
 app.use('/tiktok-api/auth', authLimiter);
 app.use('/facebook-api/auth', authLimiter);
