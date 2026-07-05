@@ -33,7 +33,26 @@ import promoRoutes from './promoRoutes.js';
 import jobRoutes from './jobRoutes.js';
 
 // Import auth middleware
-import { optionalAuth } from '../middleware/auth.js';
+import { requireAuth, optionalAuth } from '../middleware/auth.js';
+
+/**
+ * Default-deny authentication gate.
+ * Every route requires a valid JWT EXCEPT an explicit public allowlist.
+ * This replaces the previous global `optionalAuth`, under which whole route
+ * groups (batch, clone, virals, avatar, upload, videos, social, monetization,
+ * jobs) were reachable with no authentication at all (audit C3/C4).
+ *
+ * Public prefixes still attach the user if a token is present (optionalAuth)
+ * but never block. OAuth handshakes run through authed `/exchange-code` and the
+ * separate callback ports, so no callback exemption is needed here.
+ */
+const PUBLIC_PREFIXES = ['/auth', '/health'];
+const isPublicPath = (p) => PUBLIC_PREFIXES.some((pre) => p === pre || p.startsWith(pre + '/'));
+
+const defaultDenyAuth = (req, res, next) => {
+    if (isPublicPath(req.path)) return optionalAuth(req, res, next);
+    return requireAuth(req, res, next);
+};
 
 /**
  * Mount all routes to the Express app
@@ -43,10 +62,9 @@ export const mountRoutes = (app) => {
     // Auth routes (public - no auth required)
     app.use('/auth', authRoutes);
 
-    // Apply optional auth to all subsequent routes
-    // This attaches user info to requests if a valid token is present
-    // but doesn't block requests without tokens (for backwards compatibility)
-    app.use(optionalAuth);
+    // DEFAULT-DENY: every route below requires a valid JWT unless its path is in
+    // the public allowlist (PUBLIC_PREFIXES). Replaces the old opt-in model.
+    app.use(defaultDenyAuth);
 
     // Smart generation routes
     app.use('/smart', smartRoutes);
