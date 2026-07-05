@@ -51,9 +51,10 @@ const batchController = {
         });
     },
 
-    getQueue: (req, res) => {
-        const queue = variationEngine.loadVariationQueue();
-        const schedule = variationEngine.loadSchedule();
+    getQueue: async (req, res) => {
+        const userId = req.user.id;
+        const queue = await variationEngine.loadVariationQueue(userId);
+        const schedule = await variationEngine.loadSchedule(userId);
 
         const pending = queue.variations.filter(v => v.status === 'pending').length;
         const scheduled = queue.variations.filter(v => v.status === 'scheduled').length;
@@ -70,13 +71,14 @@ const batchController = {
             schedule,
             stats: { pending, scheduled, posted, total: queue.variations.length },
             toneDistribution,
-            nextVariation: variationEngine.getNextPendingVariation()
+            nextVariation: await variationEngine.getNextPendingVariation(userId)
         });
     },
 
-    updateSchedule: (req, res) => {
+    updateSchedule: async (req, res) => {
+        const userId = req.user.id;
         const { enabled, intervalHours, maxPostsPerDay, platforms, niche } = req.body;
-        const schedule = variationEngine.loadSchedule();
+        const schedule = await variationEngine.loadSchedule(userId);
 
         if (enabled !== undefined) schedule.enabled = enabled;
         if (intervalHours !== undefined) schedule.intervalHours = intervalHours;
@@ -84,7 +86,7 @@ const batchController = {
         if (platforms !== undefined) schedule.platforms = platforms;
         if (niche !== undefined) schedule.niche = niche;
 
-        variationEngine.saveSchedule(schedule);
+        await variationEngine.saveSchedule(userId, schedule);
 
         res.json({
             success: true,
@@ -96,10 +98,11 @@ const batchController = {
     },
 
     process: async (req, res) => {
+        const userId = req.user.id;
         const { autoPost = true, platform = 'youtube' } = req.body;
 
-        const schedule = variationEngine.loadSchedule();
-        if (schedule.enabled && !variationEngine.shouldPostNow()) {
+        const schedule = await variationEngine.loadSchedule(userId);
+        if (schedule.enabled && !await variationEngine.shouldPostNow(userId)) {
             return res.json({
                 success: false,
                 message: 'Not time to post yet',
@@ -108,24 +111,24 @@ const batchController = {
             });
         }
 
-        const variation = variationEngine.getNextPendingVariation();
+        const variation = await variationEngine.getNextPendingVariation(userId);
         if (!variation) {
             return res.json({
                 success: false,
                 message: 'No pending variations in queue. Generate a new batch first.',
-                queue: variationEngine.loadVariationQueue()
+                queue: await variationEngine.loadVariationQueue(userId)
             });
         }
 
         console.log(`🎬 Processing variation: "${variation.title}"`);
         console.log(`   Tone: ${variation.tone}, Hook: ${variation.hookType}, Emotion: ${variation.emotion}`);
 
-        variationEngine.updateVariationStatus(variation.id, 'scheduled');
+        await variationEngine.updateVariationStatus(userId, variation.id, 'scheduled');
 
         const niche = schedule.niche || 'general';
 
-        const { videos } = await youtubeAnalytics.fetchAllVideoStats();
-        const emotionMap = await viralIntelligence.analyzeEmotionsWithAI(videos);
+        const { videos } = await youtubeAnalytics.fetchAllVideoStats(userId);
+        const emotionMap = await viralIntelligence.analyzeEmotionsWithAI(userId, videos);
         const viralData = viralIntelligence.analyzeForOutliers(videos, emotionMap);
 
         const storyboard = await generateNicheStoryboard(niche, variation.title, viralData);
@@ -169,7 +172,7 @@ const batchController = {
 
         const metadata = await generateAllPlatformsContent(variation.title, niche);
 
-        variationEngine.updateVariationStatus(variation.id, 'generated', {
+        await variationEngine.updateVariationStatus(userId, variation.id, 'generated', {
             videoPath: destPath,
             generatedAt: new Date().toISOString()
         });
@@ -180,7 +183,7 @@ const batchController = {
             console.log(`   📤 Uploading to ${platform}...`);
 
             if (platform === 'youtube') {
-                postResult = await youtubeAPI.uploadToYouTubeAPI(destPath, {
+                postResult = await youtubeAPI.uploadToYouTubeAPI(userId, destPath, {
                     title: metadata.youtube.title,
                     description: metadata.youtube.description,
                     hashtags: metadata.youtube.hashtags,
@@ -188,28 +191,28 @@ const batchController = {
                     categoryId: '22'
                 });
             } else if (platform === 'tiktok') {
-                postResult = await tiktokAPI.uploadToTikTokAPI(destPath, {
+                postResult = await tiktokAPI.uploadToTikTokAPI(userId, destPath, {
                     title: metadata.tiktok.title,
                     hashtags: metadata.tiktok.hashtags
                 });
             } else if (platform === 'facebook') {
-                postResult = await facebookAPI.uploadToFacebookAPI(destPath, {
+                postResult = await facebookAPI.uploadToFacebookAPI(userId, destPath, {
                     title: metadata.facebook.title,
                     description: metadata.facebook.description
                 });
             } else if (platform === 'instagram') {
-                postResult = await instagramAPI.uploadToInstagramAPI(destPath, {
+                postResult = await instagramAPI.uploadToInstagramAPI(userId, destPath, {
                     caption: metadata.instagram.caption
                 });
             }
 
             if (postResult?.success) {
-                variationEngine.updateVariationStatus(variation.id, 'posted', {
+                await variationEngine.updateVariationStatus(userId, variation.id, 'posted', {
                     postedAt: new Date().toISOString(),
                     platform,
                     postResult
                 });
-                variationEngine.recordPost();
+                await variationEngine.recordPost(userId);
                 console.log(`   ✅ Posted successfully!`);
             }
         }
@@ -223,19 +226,20 @@ const batchController = {
             metadata,
             posted: postResult?.success || false,
             postResult,
-            queue: variationEngine.loadVariationQueue(),
-            schedule: variationEngine.loadSchedule()
+            queue: await variationEngine.loadVariationQueue(userId),
+            schedule: await variationEngine.loadSchedule(userId)
         });
     },
 
     autoRun: async (req, res) => {
-        const schedule = variationEngine.loadSchedule();
+        const userId = req.user.id;
+        const schedule = await variationEngine.loadSchedule(userId);
 
         if (!schedule.enabled) {
             return res.json({ success: false, message: 'Auto-posting is disabled' });
         }
 
-        if (!variationEngine.shouldPostNow()) {
+        if (!await variationEngine.shouldPostNow(userId)) {
             return res.json({
                 success: false,
                 message: 'Not time to post yet',
@@ -245,20 +249,23 @@ const batchController = {
             });
         }
 
-        const queue = variationEngine.loadVariationQueue();
+        const queue = await variationEngine.loadVariationQueue(userId);
         const pendingCount = queue.variations.filter(v => v.status === 'pending').length;
 
         if (pendingCount < 3) {
             console.log('🔄 Queue low - generating new batch...');
-            const { videos } = await youtubeAnalytics.fetchAllVideoStats();
-            const emotionMap = await viralIntelligence.analyzeEmotionsWithAI(videos);
+            const { videos } = await youtubeAnalytics.fetchAllVideoStats(userId);
+            const emotionMap = await viralIntelligence.analyzeEmotionsWithAI(userId, videos);
             const viralData = viralIntelligence.analyzeForOutliers(videos, emotionMap);
-            await variationEngine.generateBatch(viralData, schedule.niche || 'general');
+            await variationEngine.generateBatch(userId, viralData, schedule.niche || 'general');
         }
 
         const response = await fetch(`http://localhost:${PORT}/batch/process`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': req.headers.authorization || ''  // forward token: /batch/process is default-deny protected
+            },
             body: JSON.stringify({
                 autoPost: true,
                 platform: schedule.platforms?.[0] || 'youtube'
@@ -280,9 +287,10 @@ const batchController = {
         res.json({ success: true, message: 'Queue cleared' });
     },
 
-    getAnalytics: (req, res) => {
-        const queue = variationEngine.loadVariationQueue();
-        const schedule = variationEngine.loadSchedule();
+    getAnalytics: async (req, res) => {
+        const userId = req.user.id;
+        const queue = await variationEngine.loadVariationQueue(userId);
+        const schedule = await variationEngine.loadSchedule(userId);
 
         // Calculate performance by tone
         const postedVariations = queue.variations.filter(v => v.status === 'posted');
