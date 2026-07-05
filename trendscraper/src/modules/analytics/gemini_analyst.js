@@ -1,7 +1,17 @@
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import { generateText } from "../llm.js";
 import fs from 'fs';
 
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+// Claude-backed adapter exposing the minimal Gemini-shaped interface the call sites
+// below use: getGenerativeModel().generateContent(prompt) -> result.response.text().
+// Provider lives in llm.js (claude-opus-4-8); the model argument is ignored.
+const genAI = {
+    getGenerativeModel: () => ({
+        generateContent: async (prompt) => {
+            const _text = await generateText(prompt);
+            return { response: { text: () => _text } };
+        }
+    })
+};
 
 /**
  * Gemini Analyst - AI Marketing Executive

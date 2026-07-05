@@ -217,6 +217,15 @@ export const analyticsService = {
         validateUserId(userId, 'analyticsService.getPlatformSummary');
         ensureDatabase();
         return database.analytics.getPlatformSummaryForUser(userId, platform, days);
+    },
+
+    /**
+     * Get analytics rows for a single platform (used by generators & youtube_analytics).
+     */
+    async getAnalyticsByPlatform(userId, platform, options = {}) {
+        validateUserId(userId, 'analyticsService.getAnalyticsByPlatform');
+        ensureDatabase();
+        return database.analytics.getAnalyticsByPlatformAndUser(userId, platform, options);
     }
 };
 
@@ -260,6 +269,60 @@ export const viralIntelligenceService = {
         validateUserId(userId, 'viralIntelligenceService.getUniversalPatterns');
         ensureDatabase();
         return database.analytics.getUniversalPatternsForUser(userId, minPlatforms, minScore);
+    },
+
+    /**
+     * Per-user emotion cache (JSON blob of textHash -> emotion analysis).
+     * Backed by the user_settings KV table under key 'emotion_cache'.
+     */
+    async getEmotionCache(userId) {
+        validateUserId(userId, 'viralIntelligenceService.getEmotionCache');
+        ensureDatabase();
+        return database.settings.getKV(userId, 'emotion_cache');
+    },
+
+    async saveEmotionCache(userId, cache) {
+        validateUserId(userId, 'viralIntelligenceService.saveEmotionCache');
+        ensureDatabase();
+        return database.settings.setKV(userId, 'emotion_cache', cache);
+    },
+
+    /**
+     * Per-user viral-intelligence state
+     * ({ patternAttempts, killedPatterns, winningPatterns, lastAnalysis }).
+     * Backed by the user_settings KV table under key 'viral_intelligence'.
+     */
+    async getViralIntelligence(userId) {
+        validateUserId(userId, 'viralIntelligenceService.getViralIntelligence');
+        ensureDatabase();
+        return database.settings.getKV(userId, 'viral_intelligence');
+    },
+
+    async saveViralIntelligence(userId, data) {
+        validateUserId(userId, 'viralIntelligenceService.saveViralIntelligence');
+        ensureDatabase();
+        return database.settings.setKV(userId, 'viral_intelligence', data);
+    }
+};
+
+// ============================================
+// PERFORMANCE WEIGHTS
+// ============================================
+export const weightsService = {
+    /**
+     * Per-user performance weights (JSON blob), backed by user_settings KV
+     * under key 'performance_weights'.
+     */
+    async getPerformanceWeights(userId) {
+        validateUserId(userId, 'weightsService.getPerformanceWeights');
+        ensureDatabase();
+        return database.settings.getKV(userId, 'performance_weights');
+    },
+
+    async savePerformanceWeights(userId, weights) {
+        validateUserId(userId, 'weightsService.savePerformanceWeights');
+        ensureDatabase();
+        return database.settings.setKV(userId, 'performance_weights', weights);
     }
 };
 
@@ -932,6 +995,7 @@ export default {
     training: trainingService,
     auditLogs: auditLogService,
     tokenBlacklist: tokenBlacklistService,
+    weights: weightsService,
 
     // Direct database access
     database,

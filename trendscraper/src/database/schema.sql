@@ -690,8 +690,7 @@ CREATE TABLE token_blacklist (
 -- Indexes for fast lookups
 CREATE UNIQUE INDEX idx_token_blacklist_hash ON token_blacklist(token_hash);
 CREATE INDEX idx_token_blacklist_user_id ON token_blacklist(user_id);
+-- Serves both lookups and expired-token cleanup (DELETE ... WHERE expires_at < NOW()).
+-- NOTE: a partial index WHERE expires_at < CURRENT_TIMESTAMP is illegal (CURRENT_TIMESTAMP
+-- is not IMMUTABLE) and was rejected by Postgres on every init; this plain index replaces it.
 CREATE INDEX idx_token_blacklist_expires_at ON token_blacklist(expires_at);
-
--- Index for cleanup queries (find expired tokens)
-CREATE INDEX idx_token_blacklist_expired ON token_blacklist(expires_at)
-WHERE expires_at < CURRENT_TIMESTAMP;

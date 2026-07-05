@@ -1,4 +1,4 @@
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import { generateText } from "./llm.js";
 
 /**
  * Platform-specific content generator
@@ -81,12 +81,19 @@ export const generatePlatformContent = async (videoTopic, niche, platform) => {
 
     const nicheHashtags = NICHE_HASHTAGS[niche]?.[platform] || NICHE_HASHTAGS.money[platform];
 
-    if (!process.env.GEMINI_API_KEY) {
+    if (!process.env.ANTHROPIC_API_KEY) {
         return generateFallbackContent(videoTopic, niche, platform, config, nicheHashtags);
     }
 
     try {
-        const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+        const genAI = {
+            getGenerativeModel: () => ({
+                generateContent: async (prompt) => {
+                    const _text = await generateText(prompt);
+                    return { response: { text: () => _text } };
+                }
+            })
+        };
         const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
 
         // Build platform-specific prompt based on Money Printer strategy

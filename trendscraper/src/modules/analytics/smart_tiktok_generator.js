@@ -1,4 +1,4 @@
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import { generateText } from "../llm.js";
 import tiktokAnalytics from './tiktok_analytics.js';
 import explorationConfig from './exploration_config.js';
 import performanceWeights from './performance_weights.js';
@@ -328,7 +328,7 @@ const generateFromTemplate = async (userId, hook) => {
  * Generate topic using AI (slower, more creative)
  */
 const generateFromAI = async (userId, niche, recentTopics, hook) => {
-    if (!process.env.GEMINI_API_KEY) {
+    if (!process.env.ANTHROPIC_API_KEY) {
         return null;
     }
 
@@ -393,10 +393,8 @@ Generate ONE TikTok hook. Return ONLY the hook. Nothing else.`;
     }
 
     try {
-        const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-        const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
-        const result = await model.generateContent(prompt);
-        let topic = result.response.text().trim();
+        const responseText = await generateText(prompt);
+        let topic = responseText.trim();
 
         // Clean up
         topic = topic.replace(/^["'\-\s]+|["'\-\s]+$/g, '').trim();

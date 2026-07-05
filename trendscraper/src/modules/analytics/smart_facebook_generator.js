@@ -1,4 +1,4 @@
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import { generateText } from "../llm.js";
 import facebookAnalytics from './facebook_analytics.js';
 import performanceWeights from './performance_weights.js';
 import explorationConfig from './exploration_config.js';
@@ -249,7 +249,7 @@ const generateFromTemplate = async (userId, hookName) => {
 };
 
 const generateFromAI = async (userId, bestPatterns, recentTopics, niche) => {
-    if (!process.env.GEMINI_API_KEY) return null;
+    if (!process.env.ANTHROPIC_API_KEY) return null;
 
     const topHook = bestPatterns.hooks[0];
     const hookDef = FB_HOOK_PATTERNS[topHook?.name] || FB_HOOK_PATTERNS['shareable-wisdom'];
@@ -285,10 +285,8 @@ Create ONE unique Facebook Reel topic that:
 Return ONLY the topic. No explanation.`;
 
     try {
-        const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-        const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
-        const result = await model.generateContent(prompt);
-        let topic = result.response.text().trim();
+        const responseText = await generateText(prompt);
+        let topic = responseText.trim();
         topic = topic.replace(/^["'\-\s]+|["'\-\s]+$/g, '').split('\n')[0];
         return topic;
     } catch (error) {

@@ -1,4 +1,4 @@
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import { generateText } from "../llm.js";
 import viralIntelligence from './viral_intelligence.js';
 import explorationConfig from './exploration_config.js';
 import performanceWeights from './performance_weights.js';
@@ -786,7 +786,7 @@ const calculateViralScore = (views, viralAnalysis) => {
  * @param {object} explorationMode - Exploration mode decision
  */
 const generateFromAI = async (bestPatterns, recentTopics, niche, viralData = null, explorationMode = null) => {
-    if (!process.env.GEMINI_API_KEY) {
+    if (!process.env.ANTHROPIC_API_KEY) {
         return null;
     }
 
@@ -939,10 +939,8 @@ Be creative, surprising, and emotionally compelling!
 Return ONLY the topic. Nothing else.`;
 
     try {
-        const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-        const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
-        const result = await model.generateContent(prompt);
-        let topic = result.response.text().trim();
+        const responseText = await generateText(prompt);
+        let topic = responseText.trim();
 
         // Clean up
         topic = topic.replace(/^["'\-\s]+|["'\-\s]+$/g, '').trim();

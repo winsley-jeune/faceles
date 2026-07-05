@@ -22,8 +22,9 @@ const env = {
     CORS_ORIGINS: (process.env.CORS_ORIGINS || 'http://localhost:5173,http://localhost:5174,http://localhost:5175,http://localhost:3000,http://127.0.0.1:5173,http://127.0.0.1:5175').split(','),
 
     // API Keys
+    ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY, // LLM content brain (Claude) — replaces Gemini
     GOOGLE_API_KEY: process.env.GOOGLE_API_KEY,
-    GEMINI_API_KEY: process.env.GEMINI_API_KEY,
+    GEMINI_API_KEY: process.env.GEMINI_API_KEY, // legacy — retained until all call sites migrate off Gemini
     REPLICATE_API_TOKEN: process.env.REPLICATE_API_TOKEN,
 
     // OAuth - Google/YouTube

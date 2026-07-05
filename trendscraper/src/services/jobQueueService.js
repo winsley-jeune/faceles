@@ -306,7 +306,14 @@ class JobQueueService {
             if (signal.aborted) throw new Error('Job cancelled');
 
             const emotion = storyboard.emotion || 'inspiring';
-            musicPath = await selectMusicByEmotion(emotion);
+            // Map emotion -> energy level for music selection (fixes the undefined
+            // selectMusicByEmotion that crashed every job — audit C2).
+            const emotionToEnergy = {
+                shock: 'high', anger: 'high', excitement: 'high', fear: 'high', outrage: 'high',
+                hope: 'medium', inspiring: 'medium', curiosity: 'medium',
+                calm: 'low', sadness: 'low'
+            };
+            musicPath = await getMusicByEnergy(emotionToEnergy[emotion] || 'medium', '/app/videos');
 
             // Step 6: Subtitle Alignment
             await progressCallback('subtitles', 75, 'Syncing subtitles to voiceover...');

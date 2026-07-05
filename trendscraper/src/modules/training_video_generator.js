@@ -1,4 +1,4 @@
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import { generateText } from "./llm.js";
 import fs from "fs";
 import path from "path";
 
@@ -173,11 +173,18 @@ export const generateTrainingStoryboard = async (trainingData) => {
 
     console.log(`📚 Generating ${template.name} video script for: ${trainingData.title}...`);
 
-    if (!process.env.GEMINI_API_KEY) {
+    if (!process.env.ANTHROPIC_API_KEY) {
         throw new Error("GEMINI_API_KEY is required");
     }
 
-    const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+    const genAI = {
+        getGenerativeModel: () => ({
+            generateContent: async (prompt) => {
+                const _text = await generateText(prompt);
+                return { response: { text: () => _text } };
+            }
+        })
+    };
     const modelNames = ["gemini-2.0-flash", "gemini-2.0-flash-exp", "gemini-2.5-flash"];
 
     // Build steps text

@@ -7,7 +7,7 @@
  * Goal: Drive sign-ups and paid subscriptions.
  */
 
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import { generateText } from '../llm.js';
 import { getNextPromoType, recordPromoGeneration } from '../../config/promo_config.js';
 import { generatePromoBrandSummary } from '../promo_brand_context.js';
 
@@ -246,8 +246,8 @@ export function getRandomPromoTopic(type = null) {
  * @returns {Promise<Object>} Generated topic with metadata
  */
 export async function generatePromoTopicWithAI(type = null, platform = 'youtube') {
-  if (!process.env.GEMINI_API_KEY) {
-    console.log('   ⚠️ No GEMINI_API_KEY, using template');
+  if (!process.env.ANTHROPIC_API_KEY) {
+    console.log('   ⚠️ No ANTHROPIC_API_KEY, using template');
     return {
       topic: getRandomPromoTopic(type),
       type,
@@ -262,8 +262,7 @@ export async function generatePromoTopicWithAI(type = null, platform = 'youtube'
     type = getNextPromoType();
   }
 
-  const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-  const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
+  // Topic generation uses Claude via generateText() below.
 
   const brandSummary = generatePromoBrandSummary();
 
@@ -315,8 +314,8 @@ OUTPUT: Return ONLY the topic text. No explanation, no quotes, just the topic.
 Generate now:`;
 
   try {
-    const result = await model.generateContent(prompt);
-    let topic = result.response.text().trim();
+    const responseText = await generateText(prompt);
+    let topic = responseText.trim();
 
     // Clean up
     topic = topic.replace(/^["'\-\s]+|["'\-\s]+$/g, '').trim();

@@ -1,4 +1,4 @@
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import { generateText } from "./llm.js";
 import contentConfig from "./analytics/content_config.js";
 import brandContext from "./brand_context.js";
 import crossPlatform from "./analytics/cross_platform.js";
@@ -121,19 +121,7 @@ export const generateNicheStoryboard = async (niche, topic, viralData = null, pl
     console.log(`🧠 Brainstorming for ${config.name}: ${sanitizedTopic}...`);
     console.log(`   📐 Target: ${config.targetDuration}s, ${config.sceneCount[0]}-${config.sceneCount[1]} scenes, ${config.hookDuration}s hook`);
 
-    if (!process.env.GEMINI_API_KEY) {
-        console.error("❌ GEMINI_API_KEY is not set in environment variables!");
-        throw new Error("GEMINI_API_KEY is required");
-    }
-
-    const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-
-    // LIST OF MODELS TO TRY (In order of preference) - Using your available models
-    const modelNames = [
-        "gemini-2.0-flash",
-        "gemini-2.0-flash-exp",
-        "gemini-2.5-flash"
-    ];
+    // LLM provider is Claude via the llm.js adapter; it fails loud if ANTHROPIC_API_KEY is missing.
 
     // GET AI-LEARNED OPTIMIZATION RULES
     let optimizationRules = "";
@@ -356,42 +344,36 @@ ${exampleFormat}
     The CTA should feel natural and match the video's tone. Never be generic like "Like and subscribe".
   `;
 
-    // --- THE RETRY LOOP ---
-    for (const modelName of modelNames) {
-        try {
-            console.log(`   Trying model: ${modelName}...`);
-            const model = genAI.getGenerativeModel({ model: modelName });
+    // --- GENERATE VIA CLAUDE (llm.js adapter) ---
+    try {
+        console.log(`   Generating storyboard with Claude...`);
+        const text = await generateText(prompt);
 
-            const result = await model.generateContent(prompt);
-            const text = result.response.text();
+        console.log("   📝 AI Response received. Parsing...");
+        const storyboard = parseRobustScript(text, platform);
 
-            console.log("   📝 AI Response received. Parsing...");
-            const storyboard = parseRobustScript(text, platform);
+        if (storyboard.length > 0) {
+            // Calculate total duration for logging
+            const totalDuration = storyboard.reduce((sum, s) => sum + s.duration, 0);
+            console.log(`   ✅ Success! Generated ${storyboard.length} scenes (${totalDuration}s total).`);
 
-            if (storyboard.length > 0) {
-                // Calculate total duration for logging
-                const totalDuration = storyboard.reduce((sum, s) => sum + s.duration, 0);
-                console.log(`   ✅ Success with ${modelName}! Generated ${storyboard.length} scenes (${totalDuration}s total).`);
+            // Add Hook/CTA types manually since we used a simple parser
+            storyboard[0].scene_type = 'hook';
+            storyboard[0].duration = config.hookDuration; // Enforce platform hook duration
+            storyboard[storyboard.length - 1].scene_type = 'cta';
 
-                // Add Hook/CTA types manually since we used a simple parser
-                storyboard[0].scene_type = 'hook';
-                storyboard[0].duration = config.hookDuration; // Enforce platform hook duration
-                storyboard[storyboard.length - 1].scene_type = 'cta';
+            // Log platform optimization applied
+            console.log(`   🎯 Optimized for ${config.name}: ${config.pacingStyle} pacing, ${config.hookDuration}s hook`);
 
-                // Log platform optimization applied
-                console.log(`   🎯 Optimized for ${config.name}: ${config.pacingStyle} pacing, ${config.hookDuration}s hook`);
-
-                return storyboard;
-            }
-
-        } catch (e) {
-            console.warn(`   ⚠️ Model ${modelName} failed: ${e.message}`);
-            console.warn(`   Full error:`, e.toString());
-            // Continue to next model...
+            return storyboard;
         }
+        console.error("❌ Parser produced 0 scenes from the LLM output.");
+    } catch (e) {
+        console.warn(`   ⚠️ Claude generation failed: ${e.message}`);
+        console.warn(`   Full error:`, e.toString());
     }
 
-    console.error("❌ ALL AI MODELS FAILED.");
+    console.error("❌ AI STORYBOARD GENERATION FAILED.");
     // Only hit this if EVERYTHING fails
     return [
         { text: `We tried to explain ${topic}.`, image_prompt: "3d isometric robot error", duration: 5 },

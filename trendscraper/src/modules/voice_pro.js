@@ -1,7 +1,33 @@
 import fs from "fs";
 import path from "path";
 import fetch from "node-fetch";
+import { execFile } from "child_process";
 import crossPlatform from "./analytics/cross_platform.js";
+
+/**
+ * Free voice synthesis via the edge-tts CLI (no API key, no paid plan).
+ * Used as a fallback when ElevenLabs is unavailable (missing key, or a plan
+ * error such as 402 "paid plan required" on library voices). Returns the audio
+ * as base64, matching generateProVoice's contract.
+ */
+const generateEdgeVoice = async (text, outputDir, voiceConfig = {}) => {
+    if (!fs.existsSync(outputDir)) fs.mkdirSync(outputDir, { recursive: true });
+    const audioPath = path.join(outputDir, "voiceover.mp3");
+    const edgeVoice = voiceConfig.gender === "male" ? "en-US-GuyNeural" : "en-US-AriaNeural";
+    await new Promise((resolve, reject) => {
+        execFile(
+            "edge-tts",
+            ["--voice", edgeVoice, "--text", text, "--write-media", audioPath],
+            { timeout: 120000 },
+            (err) => (err ? reject(err) : resolve())
+        );
+    });
+    if (!fs.existsSync(audioPath) || fs.statSync(audioPath).size === 0) {
+        throw new Error("edge-tts produced no audio");
+    }
+    console.log(`   ✅ Voiceover (free edge-tts) saved: ${audioPath}`);
+    return fs.readFileSync(audioPath).toString("base64");
+};
 
 // Voice presets for different content types
 // Includes both male and female voices for variety
@@ -132,12 +158,14 @@ export const generateProVoice = async (text, outputDir, options = {}) => {
     const voiceId = customVoiceId || voiceConfig.voiceId;
     const apiKey = process.env.ELEVENLABS_API_KEY;
 
-    if (!apiKey) {
-        throw new Error("ELEVENLABS_API_KEY is missing in .env!");
-    }
-
     // Optimize text for better TTS delivery
     const optimizedText = optimizeTextForSpeech(text);
+
+    // No ElevenLabs key → free edge-tts (as advertised by env validation).
+    if (!apiKey) {
+        console.warn("   ⚠️ No ELEVENLABS_API_KEY — using free edge-tts.");
+        return generateEdgeVoice(optimizedText, outputDir, voiceConfig);
+    }
 
     const url = `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`;
 
@@ -182,8 +210,14 @@ export const generateProVoice = async (text, outputDir, options = {}) => {
         return fs.readFileSync(audioPath).toString('base64');
 
     } catch (error) {
-        console.error("❌ Voice generation failed:", error.message);
-        throw error;
+        console.error("❌ ElevenLabs voice failed:", error.message);
+        console.warn("   ↩️ Falling back to free edge-tts...");
+        try {
+            return await generateEdgeVoice(optimizedText, outputDir, voiceConfig);
+        } catch (fbErr) {
+            console.error("❌ edge-tts fallback also failed:", fbErr.message);
+            throw error;
+        }
     }
 };
 

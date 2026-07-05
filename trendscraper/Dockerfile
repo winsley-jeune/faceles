@@ -21,9 +21,9 @@ WORKDIR /app
 COPY src/package.json ./
 RUN npm install
 
-# Install Playwright browsers for auto-posting
-RUN npx playwright install chromium
-RUN npx playwright install-deps chromium
+# NOTE: Playwright browser install removed — posting is API-only (browser-automation
+# uploaders are being deleted). This also unblocks the image build on node:24-slim,
+# where `playwright install-deps chromium` fails.
 
 COPY src/ /app/
 

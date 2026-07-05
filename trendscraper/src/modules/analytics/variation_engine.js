@@ -1,10 +1,19 @@
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import { generateText } from '../llm.js';
 import viralIntelligence from './viral_intelligence.js';
 import explorationConfig from './exploration_config.js';
 import dataService from '../../services/dataService.js';
 
-// Initialize Gemini
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+// Claude-backed adapter exposing the minimal Gemini-shaped interface the call sites
+// below use: getGenerativeModel().generateContent(prompt) -> result.response.text().
+// Provider lives in llm.js (claude-opus-4-8); the model argument is ignored.
+const genAI = {
+    getGenerativeModel: () => ({
+        generateContent: async (prompt) => {
+            const _text = await generateText(prompt);
+            return { response: { text: () => _text } };
+        }
+    })
+};
 
 /**
  * VARIATION ENGINE

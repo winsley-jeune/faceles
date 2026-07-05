@@ -7,8 +7,8 @@ const ENV_CONFIG = {
     // Required for core functionality
     required: [
         {
-            name: 'GEMINI_API_KEY',
-            description: 'Google Gemini API key for AI content generation',
+            name: 'ANTHROPIC_API_KEY',
+            description: 'Anthropic (Claude) API key for AI content generation',
             category: 'AI Services'
         }
     ],

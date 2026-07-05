@@ -1,4 +1,4 @@
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import { generateText } from "../llm.js";
 import instagramAnalytics from './instagram_analytics.js';
 import explorationConfig from './exploration_config.js';
 import performanceWeights from './performance_weights.js';
@@ -222,7 +222,7 @@ const generateFromTemplate = async (userId, hookType = null, contentType = 'foll
  * Generate topic using AI (slower, more creative)
  */
 const generateFromAI = async (userId, niche, recentTopics, contentType = 'follower', recommendation = null) => {
-    if (!process.env.GEMINI_API_KEY) {
+    if (!process.env.ANTHROPIC_API_KEY) {
         return null;
     }
 
@@ -290,10 +290,8 @@ Generate ONE Instagram Reel topic. Return ONLY the topic. Nothing else.`;
     }
 
     try {
-        const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-        const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
-        const result = await model.generateContent(prompt);
-        let topic = result.response.text().trim();
+        const responseText = await generateText(prompt);
+        let topic = responseText.trim();
 
         // Clean up
         topic = topic.replace(/^["'\-\s]+|["'\-\s]+$/g, '').trim();

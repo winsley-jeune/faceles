@@ -1,4 +1,4 @@
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import { generateText } from "../llm.js";
 import youtubeAnalytics from './youtube_analytics.js';
 import explorationConfig from './exploration_config.js';
 import performanceWeights from './performance_weights.js';
@@ -311,7 +311,7 @@ const selectHookByMinimax = async (userId, niche, channelStats = null) => {
     hookScores.sort((a, b) => b.combinedScore - a.combinedScore);
 
     // Exploration strategy
-    const exploration = explorationConfig.getExplorationDecision('youtube');
+    const exploration = await explorationConfig.getExplorationDecision(userId, 'youtube');
 
     if (exploration.isExploring) {
         // 30% pick from bottom half for exploration
@@ -369,14 +369,13 @@ const generateFromTemplate = async (userId, hook) => {
  * Generate AI-enhanced topic for YouTube
  */
 const generateWithAI = async (userId, niche, hook, recentTopics = []) => {
-    if (!process.env.GEMINI_API_KEY) {
-        console.log('   ⚠️ No Gemini API key, using template');
+    if (!process.env.ANTHROPIC_API_KEY) {
+        console.log('   ⚠️ No Anthropic API key, using template');
         return null;
     }
 
     try {
-        const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-        const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+        // Topic generation uses Claude via generateText() below.
 
         // Get winning patterns
         let winningPatterns = '';
@@ -416,8 +415,8 @@ OUTPUT: Just the topic title, nothing else.
 The topic should match this style: "${hook.templates[0]}"
         `;
 
-        const result = await model.generateContent(prompt);
-        const topic = result.response.text().trim().replace(/["\n]/g, '').slice(0, 150);
+        const responseText = await generateText(prompt);
+        const topic = responseText.trim().replace(/["\n]/g, '').slice(0, 150);
 
         if (topic && topic.length > 15 && !recentTopics.includes(topic)) {
             return topic;

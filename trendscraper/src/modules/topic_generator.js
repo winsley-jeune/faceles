@@ -1,4 +1,4 @@
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import { generateText } from "./llm.js";
 
 // Viral content criteria with engagement metrics
 const VIRAL_CRITERIA = {
@@ -165,12 +165,19 @@ export const generateViralTopics = async (options = {}) => {
         avoidRecent = []         // Topics to avoid (already used)
     } = options;
 
-    if (!process.env.GEMINI_API_KEY) {
+    if (!process.env.ANTHROPIC_API_KEY) {
         console.error("❌ GEMINI_API_KEY is not set in environment variables!");
         throw new Error("GEMINI_API_KEY is required");
     }
 
-    const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+    const genAI = {
+        getGenerativeModel: () => ({
+            generateContent: async (prompt) => {
+                const _text = await generateText(prompt);
+                return { response: { text: () => _text } };
+            }
+        })
+    };
     const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
 
     const criteriaConfig = VIRAL_CRITERIA[criteria] || VIRAL_CRITERIA.viral;
@@ -274,11 +281,18 @@ export const getRandomViralTopic = async (criteria = 'viral', niche = null) => {
  * Analyze a topic for viral potential
  */
 export const analyzeViralPotential = async (topic) => {
-    if (!process.env.GEMINI_API_KEY) {
+    if (!process.env.ANTHROPIC_API_KEY) {
         throw new Error("GEMINI_API_KEY is required");
     }
 
-    const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+    const genAI = {
+        getGenerativeModel: () => ({
+            generateContent: async (prompt) => {
+                const _text = await generateText(prompt);
+                return { response: { text: () => _text } };
+            }
+        })
+    };
     const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
 
     const prompt = `Analyze this video topic for viral potential (TikTok/Reels/Shorts):

@@ -11,7 +11,7 @@
 
 import fs from 'fs';
 import path from 'path';
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import { generateText } from "./llm.js";
 
 // Supported document types
 const SUPPORTED_TYPES = {
@@ -118,11 +118,18 @@ export const analyzeDocumentStructure = async (text, options = {}) => {
         targetDuration = 180
     } = options;
 
-    if (!process.env.GEMINI_API_KEY) {
+    if (!process.env.ANTHROPIC_API_KEY) {
         throw new Error("GEMINI_API_KEY is required for document analysis");
     }
 
-    const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+    const genAI = {
+        getGenerativeModel: () => ({
+            generateContent: async (prompt) => {
+                const _text = await generateText(prompt);
+                return { response: { text: () => _text } };
+            }
+        })
+    };
     const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
 
     // Truncate text if too long

@@ -13,6 +13,16 @@
 
 # JWT secrets
 data/.jwt_secret
+**/.jwt_secret
+
+# Secrets, tokens, sessions, browser profiles (NEVER commit)
+**/*_tokens.json
+**/*_cookies.json
+**/.oauth_states.json
+**/chrome_profile/
+**/Network/Cookies
+data_backup_*/
+data/chrome_profile/
 
 # ============================================
 # NODE & NPM

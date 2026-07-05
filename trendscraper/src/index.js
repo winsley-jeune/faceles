@@ -21,6 +21,7 @@ import autoScheduler from './services/autoScheduler.js';
 import jobQueueService from './services/jobQueueService.js';
 import youtubeAnalytics from './modules/analytics/youtube_analytics.js';
 import { initDatabase, closeDatabase } from './database/index.js';
+import { runMigrations } from './database/migrate.js';
 
 const PORT = env.PORT;
 
@@ -84,6 +85,8 @@ const initializeDatabaseConnection = async () => {
         try {
             await initDatabase();
             logger.info('   Database connected successfully');
+            logger.info('   Running database migrations...');
+            await runMigrations();
         } catch (err) {
             logger.warn(`   Database connection failed: ${err.message}`);
             logger.warn('   Falling back to JSON file storage');

@@ -22,6 +22,33 @@ const settingsRepository = {
     },
 
     /**
+     * Generic per-user key/value read. user_settings is a KV table
+     * (setting_key / setting_value JSONB); used for JSON blobs such as
+     * 'emotion_cache' and 'viral_intelligence'. Returns the stored value or null.
+     */
+    async getKV(userId, key) {
+        const result = await db.query(
+            'SELECT setting_value FROM user_settings WHERE user_id = $1 AND setting_key = $2',
+            [userId, key]
+        );
+        return result.rows[0] ? result.rows[0].setting_value : null;
+    },
+
+    /**
+     * Generic per-user key/value upsert (keyed on the user_id+setting_key unique constraint).
+     */
+    async setKV(userId, key, value) {
+        await db.query(
+            `INSERT INTO user_settings (user_id, setting_key, setting_value)
+             VALUES ($1, $2, $3)
+             ON CONFLICT (user_id, setting_key)
+             DO UPDATE SET setting_value = $3, updated_at = CURRENT_TIMESTAMP`,
+            [userId, key, JSON.stringify(value)]
+        );
+        return value;
+    },
+
+    /**
      * Create or update user settings
      */
     async upsertSettings(userId, settings) {

@@ -129,7 +129,7 @@ const DEFAULT_CONFIG = {
  */
 export const loadConfig = async (userId) => {
     try {
-        const config = await dataService.explorationConfig.getExplorationConfig(userId);
+        const config = await dataService.exploration.getConfig(userId);
         if (config) {
             return deepMerge(DEFAULT_CONFIG, config);
         }
@@ -436,10 +436,20 @@ export const getSummary = async (userId) => {
     };
 };
 
+/**
+ * Exploration decision for a platform. Wraps shouldExplore() and also exposes the
+ * `isExploring` alias that callers (e.g. smart_youtube_generator) rely on.
+ */
+export const getExplorationDecision = async (userId, platform = 'youtube') => {
+    const decision = await shouldExplore(userId, platform);
+    return { ...decision, isExploring: decision.isExploration };
+};
+
 export default {
     loadConfig,
     saveConfig,
     shouldExplore,
+    getExplorationDecision,
     shouldBeStupidHustle,
     getToneDistribution,
     getPlatformConfig,
