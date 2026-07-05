@@ -14,9 +14,11 @@ import crypto from 'crypto';
 const PREFIX = 'enc:v1:';
 
 function getKey() {
+    // Prefer a dedicated key; fall back to JWT_SECRET (guaranteed stable across
+    // restarts). SESSION_SECRET is intentionally NOT used — it can be generated
+    // randomly per boot, which would make previously-encrypted tokens unreadable.
     const secret =
         process.env.TOKEN_ENCRYPTION_KEY ||
-        process.env.SESSION_SECRET ||
         process.env.JWT_SECRET;
     if (!secret) {
         throw new Error(
