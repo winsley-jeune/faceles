@@ -1,34 +1,33 @@
+/**
+ * Auto-Poster (API-only, multi-tenant)
+ *
+ * Posts videos to platforms via their OFFICIAL APIs (through unified_uploader),
+ * scoped to a userId so the correct tenant's OAuth tokens are used.
+ *
+ * Browser-automation login/session (Playwright) has been removed. Connecting a
+ * platform is done via OAuth at the /{platform}-api/auth endpoints, not a backend
+ * "login". NOTE: the JSON queue/history below is process-global legacy state; the
+ * modern per-user scheduling path is services/autoScheduler.js + the job queue.
+ */
 import fs from 'fs';
 import path from 'path';
-import schedule from 'node-schedule';
 
 import { generateAllPlatformsContent } from './social_content.js';
-import { uploadToYouTube, youtubeLogin, checkYouTubeSession } from './uploaders/youtube_uploader.js';
-import { uploadToTikTok, tiktokLogin, checkTikTokSession } from './uploaders/tiktok_uploader.js';
-import { uploadToInstagram, instagramLogin, checkInstagramSession } from './uploaders/instagram_uploader.js';
-import { uploadToFacebook, facebookLogin, checkFacebookSession } from './uploaders/facebook_uploader.js';
-
-/**
- * Auto-Poster Module
- * Automatically posts videos to TikTok, Instagram, YouTube Shorts, and Facebook Reels
- * Supports 2x daily posting schedule
- */
+import unifiedUploader from './unified_uploader.js';
+import { checkYouTubeAPIStatus } from './uploaders/youtube_api_uploader.js';
+import { checkTikTokAPIStatus } from './uploaders/tiktok_api_uploader.js';
+import { checkInstagramAPIStatus } from './uploaders/instagram_api_uploader.js';
+import { checkFacebookAPIStatus } from './uploaders/facebook_api_uploader.js';
 
 const QUEUE_PATH = '/app/data/post_queue.json';
 const HISTORY_PATH = '/app/data/post_history.json';
 const SETTINGS_PATH = '/app/data/poster_settings.json';
 
-// Default posting times (24h format)
-const DEFAULT_POSTING_TIMES = ['09:00', '18:00']; // 9 AM and 6 PM
+const DEFAULT_POSTING_TIMES = ['09:00', '18:00'];
 
-/**
- * Load/Save helper functions
- */
 const loadJSON = (filepath, defaultValue = []) => {
     try {
-        if (fs.existsSync(filepath)) {
-            return JSON.parse(fs.readFileSync(filepath, 'utf8'));
-        }
+        if (fs.existsSync(filepath)) return JSON.parse(fs.readFileSync(filepath, 'utf8'));
     } catch (e) {
         console.warn(`[auto_poster] Failed to load JSON from ${filepath}: ${e.message}`);
     }
@@ -41,305 +40,125 @@ const saveJSON = (filepath, data) => {
     fs.writeFileSync(filepath, JSON.stringify(data, null, 2));
 };
 
-/**
- * Get settings
- */
-export const getSettings = () => {
-    return loadJSON(SETTINGS_PATH, {
-        enabled: false,
-        postingTimes: DEFAULT_POSTING_TIMES,
-        platforms: {
-            youtube: { enabled: true, autoPost: true },
-            tiktok: { enabled: true, autoPost: true },
-            instagram: { enabled: true, autoPost: true },
-            facebook: { enabled: true, autoPost: true }
-        },
-        timezone: 'America/New_York'
-    });
-};
+export const getSettings = () => loadJSON(SETTINGS_PATH, {
+    enabled: false,
+    postingTimes: DEFAULT_POSTING_TIMES,
+    platforms: {
+        youtube: { enabled: true, autoPost: true },
+        tiktok: { enabled: true, autoPost: true },
+        instagram: { enabled: true, autoPost: true },
+        facebook: { enabled: true, autoPost: true }
+    },
+    timezone: 'America/New_York'
+});
 
-export const saveSettings = (settings) => {
-    saveJSON(SETTINGS_PATH, settings);
-};
+export const saveSettings = (settings) => { saveJSON(SETTINGS_PATH, settings); return settings; };
 
-/**
- * Add video to posting queue
- */
-export const addToQueue = async (videoPath, topic, niche) => {
-    console.log('📋 Adding video to posting queue...');
-
-    // Generate platform-specific content
+/** Add a video to the posting queue (records the owning userId). */
+export const addToQueue = async (userId, videoPath, topic, niche) => {
+    if (!userId) throw new Error('auto_poster.addToQueue: userId is required');
     const platformContent = await generateAllPlatformsContent(topic, niche);
-
     const queueItem = {
         id: Date.now().toString(),
-        videoPath,
-        topic,
-        niche,
+        userId, videoPath, topic, niche,
         content: platformContent,
         addedAt: new Date().toISOString(),
         status: 'pending',
         posts: {}
     };
-
     const queue = loadJSON(QUEUE_PATH, []);
     queue.push(queueItem);
     saveJSON(QUEUE_PATH, queue);
-
-    console.log(`   ✅ Added to queue: ${topic}`);
+    console.log(`   ✅ [${userId}] Added to queue: ${topic}`);
     return queueItem;
 };
 
-/**
- * Get posting queue
- */
 export const getQueue = () => loadJSON(QUEUE_PATH, []);
-
-/**
- * Get posting history
- */
 export const getHistory = () => loadJSON(HISTORY_PATH, []);
 
-/**
- * Post to a single platform
- * Uses SEO-optimized content from social_content.js (Money Printer strategy)
- */
-export const postToPlatform = async (queueItem, platform) => {
-    const content = queueItem.content[platform];
-    if (!content) {
-        return { success: false, error: 'No content generated for platform' };
-    }
+/** Post one queue item to a single platform via the official API. */
+export const postToPlatform = async (userId, queueItem, platform) => {
+    if (!userId) throw new Error('auto_poster.postToPlatform: userId is required');
+    const content = queueItem.content?.[platform];
+    if (!content) return { success: false, error: 'No content generated for platform' };
 
-    console.log(`📤 Posting to ${platform}...`);
-    console.log(`   📋 Title: ${content.title}`);
-    console.log(`   #️⃣ Tags: ${content.hashtagString}`);
-
-    let result;
-    switch (platform) {
-        case 'youtube':
-            // YouTube: Uses CAPS title format + emoji + #Shorts
-            result = await uploadToYouTube(queueItem.videoPath, {
-                title: content.title,
-                description: content.fullCaption,
-                hashtags: content.hashtags
-            });
-            break;
-        case 'tiktok':
-
-            result = await uploadToTikTok(queueItem.videoPath, {
-                title: content.title,
-                description: content.fullCaption,
-                hashtags: content.hashtags
-            });
-            break;
-        case 'instagram':
-
-            result = await uploadToInstagram(queueItem.videoPath, {
-                description: content.fullCaption,
-                hashtags: content.hashtags
-            });
-            break;
-        case 'facebook':
-            result = await uploadToFacebook(queueItem.videoPath, {
-                description: content.fullCaption,
-                hashtags: content.hashtags,
-                pinnedComment: content.pinnedComment
-            });
-            break;
-        default:
-            result = { success: false, error: 'Unknown platform' };
-    }
-
-    return result;
+    return unifiedUploader.upload(userId, platform, queueItem.videoPath, {
+        title: content.title,
+        description: content.fullCaption,
+        caption: content.fullCaption,
+        hashtags: content.hashtags
+    });
 };
 
-/**
- * Post to all enabled platforms
- */
-export const postToAllPlatforms = async (queueItem) => {
+/** Post one queue item to all platforms enabled in settings. */
+export const postToAllPlatforms = async (userId, queueItem) => {
+    if (!userId) throw new Error('auto_poster.postToAllPlatforms: userId is required');
     const settings = getSettings();
     const results = {};
 
     for (const [platform, config] of Object.entries(settings.platforms)) {
         if (config.enabled && config.autoPost) {
-            results[platform] = await postToPlatform(queueItem, platform);
-            // Small delay between platforms
-            await new Promise(r => setTimeout(r, 5000));
+            results[platform] = await postToPlatform(userId, queueItem, platform);
+            await new Promise((r) => setTimeout(r, 3000));
         }
     }
 
-    // Update queue item status
     const queue = loadJSON(QUEUE_PATH, []);
-    const itemIndex = queue.findIndex(q => q.id === queueItem.id);
-    if (itemIndex !== -1) {
-        queue[itemIndex].posts = results;
-        queue[itemIndex].status = 'posted';
-        queue[itemIndex].postedAt = new Date().toISOString();
+    const i = queue.findIndex((q) => q.id === queueItem.id);
+    if (i !== -1) {
+        queue[i].posts = results;
+        queue[i].status = 'posted';
+        queue[i].postedAt = new Date().toISOString();
         saveJSON(QUEUE_PATH, queue);
     }
 
-    // Add to history
     const history = loadJSON(HISTORY_PATH, []);
-    history.unshift({
-        ...queueItem,
-        posts: results,
-        postedAt: new Date().toISOString()
-    });
-    saveJSON(HISTORY_PATH, history.slice(0, 100)); // Keep last 100
+    history.unshift({ ...queueItem, posts: results, postedAt: new Date().toISOString() });
+    saveJSON(HISTORY_PATH, history.slice(0, 100));
 
     return results;
 };
 
-/**
- * Process next item in queue
- */
-export const processNextInQueue = async () => {
+/** Process the next pending item owned by this user. */
+export const processNextInQueue = async (userId) => {
+    if (!userId) throw new Error('auto_poster.processNextInQueue: userId is required');
     const queue = loadJSON(QUEUE_PATH, []);
-    const pendingItem = queue.find(q => q.status === 'pending');
-
+    const pendingItem = queue.find((q) => q.status === 'pending' && q.userId === userId);
     if (!pendingItem) {
-        console.log('📭 No pending items in queue');
+        console.log(`📭 [${userId}] No pending items in queue`);
         return null;
     }
-
-    console.log(`🚀 Processing queue item: ${pendingItem.topic}`);
-    const results = await postToAllPlatforms(pendingItem);
-
+    const results = await postToAllPlatforms(userId, pendingItem);
     return { item: pendingItem, results };
 };
 
-/**
- * Check all platform sessions
- */
-export const checkAllSessions = async () => {
-    console.log('🔍 Checking platform sessions...');
-
-    const results = {
-        youtube: await checkYouTubeSession(),
-        tiktok: await checkTikTokSession(),
-        instagram: await checkInstagramSession(),
-        facebook: await checkFacebookSession()
+/** Check which platforms this user has connected (via OAuth / official API). */
+export const checkConnections = async (userId) => {
+    if (!userId) throw new Error('auto_poster.checkConnections: userId is required');
+    return {
+        youtube: await checkYouTubeAPIStatus(userId).catch((e) => ({ connected: false, error: e.message })),
+        tiktok: await checkTikTokAPIStatus(userId).catch((e) => ({ connected: false, error: e.message })),
+        instagram: await checkInstagramAPIStatus(userId).catch((e) => ({ connected: false, error: e.message })),
+        facebook: await checkFacebookAPIStatus(userId).catch((e) => ({ connected: false, error: e.message }))
     };
-
-    for (const [platform, status] of Object.entries(results)) {
-        const icon = status.valid ? '✅' : '❌';
-        console.log(`   ${icon} ${platform}: ${status.message}`);
-    }
-
-    return results;
 };
 
-/**
- * Login to a specific platform
- */
-export const loginToPlatform = async (platform) => {
-    switch (platform) {
-        case 'youtube': return await youtubeLogin();
-        case 'tiktok': return await tiktokLogin();
-        case 'instagram': return await instagramLogin();
-        case 'facebook': return await facebookLogin();
-        default: return { success: false, error: 'Unknown platform' };
-    }
-};
-
-/**
- * Login to all platforms
- */
-export const loginToAllPlatforms = async () => {
-    console.log('🔐 Starting login process for all platforms...');
-    console.log('   A browser window will open for each platform.');
-    console.log('   Complete the login in each window.\n');
-
-    const results = {};
-    const platforms = ['youtube', 'tiktok', 'instagram', 'facebook'];
-
-    for (const platform of platforms) {
-        console.log(`\n--- ${platform.toUpperCase()} ---`);
-        results[platform] = await loginToPlatform(platform);
-        await new Promise(r => setTimeout(r, 2000));
-    }
-
-    return results;
-};
-
-// Scheduled jobs storage
-let scheduledJobs = [];
-
-/**
- * Start the auto-posting scheduler
- */
-export const startScheduler = () => {
-    const settings = getSettings();
-
-    if (!settings.enabled) {
-        console.log('⏸️ Auto-posting is disabled');
-        return;
-    }
-
-    // Clear existing jobs
-    scheduledJobs.forEach(job => job.cancel());
-    scheduledJobs = [];
-
-    console.log('⏰ Starting auto-post scheduler...');
-
-    settings.postingTimes.forEach(time => {
-        const [hour, minute] = time.split(':').map(Number);
-
-        const job = schedule.scheduleJob({ hour, minute, tz: settings.timezone }, async () => {
-            console.log(`\n⏰ Scheduled post time: ${time}`);
-            await processNextInQueue();
-        });
-
-        scheduledJobs.push(job);
-        console.log(`   📅 Scheduled: ${time} (${settings.timezone})`);
-    });
-
-    return scheduledJobs;
-};
-
-/**
- * Stop the scheduler
- */
-export const stopScheduler = () => {
-    scheduledJobs.forEach(job => job.cancel());
-    scheduledJobs = [];
-    console.log('⏹️ Scheduler stopped');
-};
-
-/**
- * Manual post - post immediately to all platforms
- */
-export const postNow = async (videoPath, topic, niche) => {
-    console.log('🚀 Posting immediately to all platforms...');
-
-    // Add to queue first
-    const queueItem = await addToQueue(videoPath, topic, niche);
-
-    // Post to all platforms
-    const results = await postToAllPlatforms(queueItem);
-
-    console.log('\n📊 Posting Results:');
-    for (const [platform, result] of Object.entries(results)) {
-        const icon = result.success ? '✅' : '❌';
-        console.log(`   ${icon} ${platform}: ${result.success ? 'Posted!' : result.error}`);
-    }
-
-    return results;
+/** Post immediately to all enabled platforms for a user. */
+export const postNow = async (userId, videoPath, topic, niche) => {
+    if (!userId) throw new Error('auto_poster.postNow: userId is required');
+    const queueItem = await addToQueue(userId, videoPath, topic, niche);
+    return postToAllPlatforms(userId, queueItem);
 };
 
 export default {
+    getSettings,
+    saveSettings,
     addToQueue,
     getQueue,
     getHistory,
     postToPlatform,
     postToAllPlatforms,
     processNextInQueue,
-    checkAllSessions,
-    loginToPlatform,
-    loginToAllPlatforms,
-    startScheduler,
-    stopScheduler,
-    postNow,
-    getSettings,
-    saveSettings
+    checkConnections,
+    postNow
 };

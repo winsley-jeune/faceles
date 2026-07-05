@@ -25,8 +25,6 @@
     "node-fetch": "^3.3.2",
     "node-schedule": "^2.1.1",
     "pg": "^8.16.3",
-    "playwright": "^1.40.0",
-    "puppeteer": "^24.8.2",
     "replicate": "^1.4.0",
     "uuid": "^11.1.0"
   },

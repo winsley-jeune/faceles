@@ -1,130 +1,87 @@
 /**
- * Social Controller
- * Auto-poster and social media management
+ * Social Controller (API-only, multi-tenant)
+ * Auto-poster and social-connection management. Posting is via official APIs,
+ * scoped to req.user.id. Connecting a platform is done via OAuth at the
+ * /{platform}-api/auth endpoints (not a backend browser "login").
  */
 import autoPoster from '../modules/auto_poster.js';
 
+const OAUTH_HINT = {
+    success: false,
+    message: 'Platform connection is via OAuth. Start the flow at /{platform}-api/auth (e.g. /youtube-api/auth) while authenticated.'
+};
+
 const socialController = {
-    login: async (req, res) => {
-        const { platform } = req.params;
-        console.log(`🔐 Logging in to ${platform}...`);
-
-        const result = await autoPoster.loginToPlatform(platform);
-        res.json(result);
-    },
-
-    loginAll: async (req, res) => {
-        console.log('🔐 Logging in to all platforms...');
-
-        const results = await autoPoster.loginToAllPlatforms();
-        res.json({
-            success: true,
-            results
-        });
-    },
+    // Browser login is gone — connecting is OAuth. Kept for route compatibility.
+    login: async (req, res) => res.status(410).json(OAUTH_HINT),
+    loginAll: async (req, res) => res.status(410).json(OAUTH_HINT),
 
     getSessions: async (req, res) => {
-        const sessions = await autoPoster.checkSessions();
-        res.json({
-            success: true,
-            sessions
-        });
+        const sessions = await autoPoster.checkConnections(req.user.id);
+        res.json({ success: true, sessions });
     },
 
     addToQueue: async (req, res) => {
-        const { videoPath, topic, niche = 'general', platforms } = req.body;
-
+        const { videoPath, topic, niche = 'general' } = req.body;
         if (!videoPath || !topic) {
             return res.status(400).json({ error: 'videoPath and topic are required' });
         }
-
-        const result = await autoPoster.addToQueue({
-            videoPath,
-            topic,
-            niche,
-            platforms
-        });
-
-        res.json(result);
+        const result = await autoPoster.addToQueue(req.user.id, videoPath, topic, niche);
+        res.json({ success: true, queueItem: result });
     },
 
     getQueue: async (req, res) => {
-        const queue = await autoPoster.getQueue();
-        res.json({
-            success: true,
-            queue
-        });
+        const queue = autoPoster.getQueue().filter((q) => q.userId === req.user.id);
+        res.json({ success: true, queue });
     },
 
     getHistory: async (req, res) => {
-        const history = await autoPoster.getHistory();
-        res.json({
-            success: true,
-            history
-        });
+        const history = autoPoster.getHistory().filter((h) => h.userId === req.user.id);
+        res.json({ success: true, history });
     },
 
     postNow: async (req, res) => {
         const { videoPath, topic, niche = 'general' } = req.body;
-
         if (!videoPath || !topic) {
             return res.status(400).json({ error: 'videoPath and topic are required' });
         }
-
-        console.log(`📤 Posting now: ${topic}`);
-        const results = await autoPoster.postNow(videoPath, topic, niche);
-
-        res.json({
-            success: true,
-            results
-        });
+        const results = await autoPoster.postNow(req.user.id, videoPath, topic, niche);
+        res.json({ success: true, results });
     },
 
     postToPlatform: async (req, res) => {
         const { platform } = req.params;
         const { videoPath, topic, niche = 'general' } = req.body;
-
         if (!videoPath || !topic) {
             return res.status(400).json({ error: 'videoPath and topic are required' });
         }
-
-        console.log(`📤 Posting to ${platform}: ${topic}`);
-        const result = await autoPoster.postToPlatform(platform, videoPath, topic, niche);
-
+        const queueItem = await autoPoster.addToQueue(req.user.id, videoPath, topic, niche);
+        const result = await autoPoster.postToPlatform(req.user.id, queueItem, platform);
         res.json(result);
     },
 
     processQueue: async (req, res) => {
-        console.log('⏳ Processing queue...');
-        const result = await autoPoster.processNext();
-
-        res.json(result);
+        const result = await autoPoster.processNextInQueue(req.user.id);
+        res.json({ success: true, result });
     },
 
     getSettings: async (req, res) => {
-        const settings = await autoPoster.getSettings();
-        res.json({
-            success: true,
-            settings
-        });
+        res.json({ success: true, settings: autoPoster.getSettings() });
     },
 
     updateSettings: async (req, res) => {
-        const settings = req.body;
-        const result = await autoPoster.updateSettings(settings);
-
-        res.json(result);
+        res.json({ success: true, settings: autoPoster.saveSettings(req.body) });
     },
 
-    startScheduler: async (req, res) => {
-        const result = await autoPoster.startScheduler();
-        res.json(result);
-    },
-
-    stopScheduler: async (req, res) => {
-        const result = await autoPoster.stopScheduler();
-        res.json(result);
-    }
+    // Global browser-scheduler removed — per-user scheduling is services/autoScheduler.js.
+    startScheduler: async (req, res) => res.status(410).json({
+        success: false,
+        message: 'The global auto-poster scheduler was removed. Per-user scheduling runs via the background auto-scheduler; configure posting via /batch or your posting schedule.'
+    }),
+    stopScheduler: async (req, res) => res.status(410).json({
+        success: false,
+        message: 'The global auto-poster scheduler was removed.'
+    })
 };
 
 export default socialController;

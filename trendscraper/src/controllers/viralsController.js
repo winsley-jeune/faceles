@@ -158,7 +158,7 @@ const viralsController = {
         let postResults = null;
         if (autoPost) {
             console.log(`   📤 Auto-posting to all platforms...`);
-            postResults = await autoPoster.postNow(destPath, topic, niche);
+            postResults = await autoPoster.postNow(req.user.id, destPath, topic, niche);
         }
 
         res.json({

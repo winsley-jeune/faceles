@@ -295,7 +295,7 @@ const videoController = {
 
             // Step 8: Post to platforms
             logger.info(`[${runId}] Posting to platforms`, { platforms });
-            const postResults = await autoPoster.postNow(destPath, topic, niche);
+            const postResults = await autoPoster.postNow(req.user.id, destPath, topic, niche);
 
             logger.info(`[${runId}] Video created and posted`, { filename, postResults });
 
