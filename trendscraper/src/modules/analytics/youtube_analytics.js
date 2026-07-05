@@ -692,11 +692,11 @@ const detectWinningNiche = (title) => {
  * AUTO-SELECT BEST NICHE based on YouTube performance data
  * Focuses on WINNERS (500+ views) and returns winning videos list
  */
-export const getBestNiche = async () => {
+export const getBestNiche = async (userId) => {
     console.log('🎯 Analyzing YouTube data to find best-performing niche...');
 
     try {
-        const { videos } = await fetchAllVideoStats();
+        const { videos } = await fetchAllVideoStats(userId);
 
         if (!videos || videos.length === 0) {
             console.log('   ⚠️ No videos found, defaulting to "general"');
@@ -819,8 +819,8 @@ export const getBestNiche = async () => {
 /**
  * Get best niche + best hook combination for maximum performance
  */
-export const getOptimalContentStrategy = async () => {
-    const bestNicheData = await getBestNiche();
+export const getOptimalContentStrategy = async (userId) => {
+    const bestNicheData = await getBestNiche(userId);
     const bestPatterns = getBestPatterns();
 
     return {

@@ -29,24 +29,25 @@ const PORT = env.PORT;
 
 const batchController = {
     generate: async (req, res) => {
+        const userId = req.user.id;
         const { niche = 'general' } = req.body;
         console.log(`🚀 BATCH GENERATION REQUEST for niche: ${niche}`);
 
-        const { videos } = await youtubeAnalytics.fetchAllVideoStats();
+        const { videos } = await youtubeAnalytics.fetchAllVideoStats(userId);
         if (!videos || videos.length === 0) {
             return res.status(400).json({ error: 'No YouTube videos found for analysis' });
         }
 
-        const emotionMap = await viralIntelligence.analyzeEmotionsWithAI(videos);
+        const emotionMap = await viralIntelligence.analyzeEmotionsWithAI(userId, videos);
         const viralData = viralIntelligence.analyzeForOutliers(videos, emotionMap);
 
-        const batch = await variationEngine.generateBatch(viralData, niche);
+        const batch = await variationEngine.generateBatch(userId, viralData, niche);
 
         res.json({
             success: true,
             batch,
-            queue: variationEngine.loadVariationQueue(),
-            schedule: variationEngine.loadSchedule()
+            queue: await variationEngine.loadVariationQueue(userId),
+            schedule: await variationEngine.loadSchedule(userId)
         });
     },
 

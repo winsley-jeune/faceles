@@ -388,7 +388,7 @@ const runAutoScheduler = async () => {
                     logger.info(`      🔄 Queue low - generating new batch...`);
                     const { videos } = await youtubeAnalytics.fetchAllVideoStats(userId);
                     if (videos && videos.length > 0) {
-                        const emotionMap = await viralIntelligence.analyzeEmotionsWithAI(videos);
+                        const emotionMap = await viralIntelligence.analyzeEmotionsWithAI(userId, videos);
                         const viralData = viralIntelligence.analyzeForOutliers(videos, emotionMap);
                         await variationEngine.generateBatch(userId, viralData, schedule.niche || 'general');
                     }

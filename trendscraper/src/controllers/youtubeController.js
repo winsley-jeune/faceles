@@ -162,7 +162,7 @@ const youtubeController = {
             return res.status(401).json({ error: "YouTube not connected", videos: [], totalVideos: 0 });
         }
 
-        const data = await youtubeAnalytics.fetchAllVideoStats();
+        const data = await youtubeAnalytics.fetchAllVideoStats(userId);
         const videos = data.videos || [];
 
         // Calculate performance metrics using MINIMAX scoring
