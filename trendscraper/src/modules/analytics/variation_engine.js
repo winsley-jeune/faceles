@@ -521,7 +521,22 @@ export const generateBatch = async (userId, viralData, niche = 'general') => {
     return results;
 };
 
+/**
+ * Clear a user's variation queue (per-user; replaces the old global JSON-file write).
+ */
+export const clearQueue = async (userId) => {
+    const empty = {
+        variations: [],
+        explorations: [],
+        lastGenerated: null,
+        stats: { totalGenerated: 0, totalPosted: 0, totalViews: 0 }
+    };
+    await saveVariationQueue(userId, empty);
+    return empty;
+};
+
 export default {
+    clearQueue,
     generateVariationsFromWinner,
     generateExplorationVariations,
     generateBatch,

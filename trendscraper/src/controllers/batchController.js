@@ -276,14 +276,9 @@ const batchController = {
         res.json(result);
     },
 
-    clearQueue: (req, res) => {
-        const queue = {
-            variations: [],
-            explorations: [],
-            lastGenerated: null,
-            stats: { totalGenerated: 0, totalPosted: 0, totalViews: 0 }
-        };
-        fs.writeFileSync(path.join(env.DATA_DIR, 'variation_queue.json'), JSON.stringify(queue, null, 2));
+    clearQueue: async (req, res) => {
+        const userId = req.user.id;
+        await variationEngine.clearQueue(userId);
         res.json({ success: true, message: 'Queue cleared' });
     },
 

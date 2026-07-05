@@ -120,8 +120,8 @@ const server = app.listen(PORT, async () => {
     // Initialize database connection
     await initializeDatabaseConnection();
 
-    // Refresh analytics FIRST before starting scheduler
-    await refreshAnalyticsOnStartup();
+    // NOTE: no global analytics refresh on startup — analytics are per-user and
+    // refreshed on demand / by the per-user auto-scheduler (multi-tenant).
 
     // Start job queue service for background video generation
     jobQueueService.start();
