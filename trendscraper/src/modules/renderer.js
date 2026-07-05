@@ -635,10 +635,14 @@ export const renderVideo = async ({ audioBase64, subtitles, visuals, storyboard,
 
         finalArgs.push(
             '-c:v', 'libx264',
-            '-preset', 'fast',
-            '-crf', '18',
+            '-preset', 'medium',
+            '-crf', '24',              // social-appropriate quality (was 18 = near-lossless -> ~500MB files)
+            '-maxrate', '5M',          // hard bitrate cap so output size stays sane
+            '-bufsize', '10M',
+            '-pix_fmt', 'yuv420p',     // broad player/web compatibility
+            '-movflags', '+faststart', // progressive streaming
             '-c:a', 'aac',
-            '-b:a', '192k',
+            '-b:a', '128k',
             '-shortest',
             finalPath
         );
