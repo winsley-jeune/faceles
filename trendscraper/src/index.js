@@ -39,37 +39,6 @@ const envValidation = validateEnv({
 // STARTUP ANALYTICS REFRESH
 // ===========================================
 
-/**
- * Refresh YouTube analytics on startup
- * Ensures viral score calculations use fresh data
- */
-const refreshAnalyticsOnStartup = async () => {
-    logger.info('📊 Refreshing YouTube analytics on startup...');
-
-    try {
-        const { videos, summary } = await youtubeAnalytics.fetchAllVideoStats();
-
-        if (videos && videos.length > 0) {
-            // Save fresh snapshot to analytics history
-            youtubeAnalytics.saveAnalyticsSnapshot({ videos, summary });
-
-            logger.info(`   ✅ Analytics refreshed: ${videos.length} videos, ${summary.avgViewsPerVideo} avg views`);
-            logger.info(`   🎯 Viral threshold (9+): ${summary.avgViewsPerVideo * 3}+ views`);
-
-            // Log top 3 performers
-            const top3 = videos.slice(0, 3);
-            logger.info('   🏆 Top performers:');
-            top3.forEach((v, i) => {
-                logger.info(`      ${i + 1}. ${v.stats.views} views - ${v.title.substring(0, 40)}...`);
-            });
-        } else {
-            logger.info('   ⚠️ No videos found or YouTube not connected');
-        }
-    } catch (err) {
-        logger.warn(`   ⚠️ Could not refresh analytics: ${err.message}`);
-        logger.warn('   📌 System will use cached data. Connect YouTube API to enable fresh analytics.');
-    }
-};
 
 // ===========================================
 // SERVER STARTUP
